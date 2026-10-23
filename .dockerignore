@@ -3,3 +3,6 @@
 .env
 *.zip
 node_modules
+data
+backups
+*.sqlite*

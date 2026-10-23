@@ -12,3 +12,4 @@
 .viewer-strip{max-width:1640px;margin:0 auto;padding:22px 40px;display:flex;align-items:center;gap:36px;border-top:1px solid var(--line);color:var(--muted)}.viewer-strip>div{display:flex;align-items:center;gap:10px;font-size:11px}.viewer-strip b{font-size:22px;color:var(--lime);font-variant-numeric:tabular-nums}.viewer-strip>div+div b{color:var(--white)}.viewer-strip small{margin-left:auto;font-size:9px}.viewer-strip .live-dot{margin-right:0}@media(max-width:760px){.viewer-strip{padding:20px 16px;gap:14px 24px;flex-wrap:wrap}.viewer-strip>div{font-size:10px}.viewer-strip b{font-size:20px}.viewer-strip small{width:100%;margin-left:0}}
 
 .league-intro{font-size:11px;line-height:1.8;color:var(--muted);margin:12px 0 0;max-width:760px}
+.connection-state{padding:8px 24px;text-align:center;background:#192019;color:#bfd69d;font-size:12px}.connection-state[data-online="false"]{background:#442b20;color:#ffd2a6}

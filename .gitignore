@@ -7,3 +7,8 @@ node_modules/
 *.zip
 .DS_Store
 Thumbs.db
+data/
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

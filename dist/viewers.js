@@ -22,5 +22,5 @@ async function heartbeat(){
 if('IntersectionObserver' in window){new IntersectionObserver(([entry])=>{inView=entry.isIntersecting&&entry.intersectionRatio>=.1;heartbeat();},{threshold:.1}).observe(arena);}
 document.addEventListener('visibilitychange',heartbeat);
 document.addEventListener('click',()=>setTimeout(heartbeat,0));
-window.addEventListener('pagehide',()=>{navigator.sendBeacon('/api/presence',JSON.stringify({...currentPresence(),online:false,watching:false}));});
+window.addEventListener('pagehide',()=>{navigator.sendBeacon('/api/presence',new Blob([JSON.stringify({...currentPresence(),online:false,watching:false})],{type:'application/json'}));});
 setInterval(heartbeat,5000);heartbeat();

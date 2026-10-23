@@ -1,43 +1,31 @@
+import {createChannel} from './client.js';
 import {regions} from './regions.js';
 import {cities,cityRegions} from './cities.js';
 import {flags} from './flags.js';
-import {stages,startSeason,selectEvent,upgradeBracket,completeMatch,nextMatch,readyAt,roundLabel} from './league.js';
-import {effective,event,recover,healthy,clamp} from './engine.js';
-import {bettingOpen,entrants,quoteTournament,placeBet,settleBets} from './betting.js';
-import {ensureEconomy,ensureFighterEconomy,creditSupport,creditCreation,awardBout,trainingCost,trainOutsideBout} from './economy.js';
+import {stages,nextMatch,readyAt,roundLabel} from './league.js';
+import {effective} from './engine.js';
+import {bettingOpen,entrants,quoteTournament} from './betting.js';
+import {ensureFighterEconomy,trainingCost} from './economy.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' ₽';
 const coins=n=>new Intl.NumberFormat('ru-RU').format(n)+' ◈';
 const statNames=['Сила','Ловкость','Выносливость'];
-const names=['Артём','Тимур','Руслан','Марат','Александр','Денис','Алан','Роман','Дамир','Максим','Сергей','Адам','Виктор','Илья','Михаил','Андрей'];
-const surnames=['Соколов','Волков','Громов','Орлов','Морозов','Белов','Северин','Титов','Миронов','Лебедев','Савин','Ковалёв','Крылов'];
-const nicknames=['Шторм','Север','Барс','Гранит','Искра','Титан','Вихрь','Сокол'];
-
-const KEY='combat-demo-v1';let state,storageOK=true,tickCount=0,toastTimer,activeProfile=null,activeBet=null;
-function fresh(){const now=Date.now();return {version:1,now,balance:15000,started:false,season:1,cup:0,history:[],champions:[],fighters:regions.map((region,i)=>{const a=45+i*7%31,b=Math.max(100-a,Math.min(140-a,50+i*11%21));return {id:'r'+i,name:names[i%names.length]+' '+surnames[(i*3+Math.floor(i/16))%surnames.length],nickname:nicknames[i%8],region,seed:i,stats:[a,b,180-a-b],wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:now,readyAt:now,total:0,awards:[],own:false};}),tournament:null};}
-try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');state=saved?.version===1?saved:fresh();}catch{state=fresh();storageOK=false;}
+let state,toastTimer,activeProfile=null,activeBet=null;
+let ready=false,lastAnimation=null;
+const channel=createChannel(next=>{state=next;if(ready){render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.0.0 · '+text;});
+$('#start').disabled=true;
+await channel.initial();
+$('#start').disabled=false;
 const fighter=id=>state.fighters.find(f=>f.id===id);
-state.bets??=[];
-// По два участника на город дают реальные местные отборы.
-cities.forEach((city,i)=>{for(let j=0;j<2;j++){
-  const id=`city-${i}-${j}`;if(state.fighters.some(f=>f.id===id))continue;
-  const seed=1000+i*2+j,a=50+seed%21;
-  state.fighters.push({id,name:names[seed%names.length]+' '+surnames[Math.floor(seed/names.length)%surnames.length],nickname:nicknames[seed%8],region:city.name,seed,stats:[a,60,120-a],wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:state.now,readyAt:state.now,total:0,awards:[],own:false,preparedSupport:0});
-}});
-if(!state.league&&state.tournament){
-  state.league=startSeason(state.fighters,state.season||1,state.now);
-  state.tournament.id='legacy-'+(state.tournament.number||0);state.tournament.stage=0;
-  state.tournament.season=state.season||1;state.tournament.lastPlayed=0;
-  state.league.events.unshift(state.tournament);
+const t=()=>state.tournament;
+const match=()=>t().matches[t().index];
+const pair=()=>match().ids.map(fighter);
+function animateEvent(){
+  const e=t().lastEvent;if(!e||e.key===lastAnimation||t().phase!=='live')return;
+  lastAnimation=e.key;const cs=$$('.combatant');cs.forEach(el=>el.classList.remove('attack','hit'));
+  void $('#combatants').offsetWidth;cs[e.side]?.classList.add('attack');if(e.hit)cs[1-e.side]?.classList.add('hit');
 }
-if(state.league&&state.tournament?.id){state.tournament=state.league.events.find(t=>t.id===state.tournament.id)||state.tournament;}
-if(state.tournament)upgradeBracket(state.tournament);
-// Старые сохранения получают пустой запас подготовки без сброса прогресса.
-state.likedFighters??=[];
-state.fighters.forEach(f=>{f.preparedSupport=Math.max(0,Number(f.preparedSupport)||0);f.likes=Math.max(0,Number(f.likes)||0);});
-ensureEconomy(state);
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{if(storageOK){storageOK=false;toast('Браузер не смог сохранить прогресс. Не закрывай вкладку.');}}}
 function portrait(f,large=false){if(f.avatar)return `<div class="portrait"><img src="${esc(f.avatar)}" alt="Аватар ${esc(f.name)}"></div>`;const n=f.seed||0,skin=['#bd8866','#d3a17c','#9c6d4e','#e2b18d'][n%4],shirt=['#b6cf79','#70918b','#c38266','#8e8ba1'][n%4],hair=['#27221e','#4e3729','#1f211e'][n%3];return `<div class="portrait"><svg viewBox="0 0 100 120" role="img" aria-label="Аватар ${esc(f.name)}"><path d="M4 120V102Q7 87 31 85L38 76H62L69 85Q93 87 96 102V120" fill="${shirt}"/><path d="M38 72V88L50 98L62 88V72" fill="${skin}"/><path d="M25 40Q21 15 48 13Q77 13 76 40L72 65Q64 83 50 84Q33 80 28 65Z" fill="${skin}"/><path d="M25 45L22 33Q21 6 53 7Q79 9 78 35L74 48L70 29Q48 35 32 28Z" fill="${hair}"/><path d="M31 48L42 47M58 47L69 48" stroke="${hair}" stroke-width="3"/><path d="M35 52H39M61 52H65" stroke="#171d19" stroke-width="2.7"/><path d="M50 53L47 65H53M42 73Q50 76 59 72" stroke="#734d3c" fill="none" stroke-width="2"/>${n%3===0?`<path d="M30 62Q32 83 50 85Q68 82 71 62L62 70L50 74L38 70Z" fill="${hair}" opacity=".7"/>`:''}<path d="M31 88L21 120M69 88L79 120" stroke="#0002" stroke-width="3"/><path d="M37 100H63" stroke="#182315" stroke-width="2"/><text x="50" y="112" text-anchor="middle" fill="#182315" font-size="9" font-family="sans-serif" font-weight="bold">YAROST</text></svg></div>`;}
 function flag(f){const region=cityRegions[f.region]||f.region,src=f.flag||flags[region]?.src;return src?`<img class="flag" src="${esc(src)}" alt="Флаг: ${esc(region)}" title="${esc(region)}">`:`<span class="flag" title="Флаг не указан">—</span>`;}
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4000);}
@@ -59,110 +47,13 @@ function updateProfileSupport(){
   $$('#modal-content .stat-card b').forEach((el,i)=>{el.textContent=Math.round(stats[i]);});
   $('#fighter-economy').innerHTML=fighterEconomyHTML(fighter(activeProfile));
 }
-function activatePreparedSupport(){
-  pair().forEach((f,i)=>{t().points[i]+=(f.preparedSupport||0);f.preparedSupport=0;});
-}
 function remaining(ms){const s=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;}
-function createTournament(){
-  if(!state.league)state.league=startSeason(state.fighters,state.season||1,state.now);
-  let selection=selectEvent(state.league,state.fighters,state.now);
-  if(!selection){state.season=(state.league.season||1)+1;state.league=startSeason(state.fighters,state.season,state.now);selection=selectEvent(state.league,state.fighters,state.now);}
-  state.tournament=selection.t;resetBout(selection.at);
-}
-function resetBout(at){const tour=state.tournament;tour.points=[0,0];tour.round=1;tour.elapsed=0;tour.stats=[{hp:100,energy:100,damage:0},{hp:100,energy:100,damage:0}];tour.logs=[];tour.phase='waiting';tour.waitUntil=Math.max(state.now+15000,at);}
-if(!state.tournament)createTournament();
-const t=()=>state.tournament;
-const match=()=>t().matches[t().index];
-const pair=()=>match().ids.map(fighter);
-function log(text,highlight=false){t().logs.unshift({text,highlight,time:`${t().round}.${remaining(t().elapsed*1000)}`});t().logs=t().logs.slice(0,50);}
-function finish(winnerIndex,reason){
-  const tour=t(),m=match(),[a,b]=pair(),winner=winnerIndex===0?a:b,loser=winnerIndex===0?b:a;
-  m.reason=reason;winner.wins++;loser.losses++;
-  const change=Math.round(28*(1-1/(1+10**((loser.rating-winner.rating)/400))));
-  winner.rating+=change;loser.rating=Math.max(100,loser.rating-change);
-  for(const f of [a,b]){f.fatigue=Math.min(.15,f.fatigue+.05);f.restAt=state.now;f.readyAt=state.now+600000;}
-  completeMatch(tour,winner.id);
-  const payout=settleBets(state,tour);
-  if(tour.done){
-    state.cup++;winner.awards.push(tour.name+' · сезон '+(tour.season||state.season||1));
-    state.champions.unshift({name:winner.name,cup:tour.name});state.champions=state.champions.slice(0,20);
-  }
-  state.history.unshift({winner:winner.name,loser:loser.name,reason,cup:tour.name});state.history=state.history.slice(0,30);
-  tour.phase='result';tour.waitUntil=state.now+24000;
-  const prizes=awardBout(state,tour,winner,loser);trainOutsideBout(state);
-  log(`${winner.name} побеждает! ${reason}. Поддержка этого боя завершена.${prizes?' Призовые: '+coins(prizes.winner)+' победителю, '+coins(prizes.loser)+' сопернику.':''}${payout?' На игровой баланс зачислено по ставкам: '+money(payout)+'.':''}`,true);save();render();
-}
-function prepareNext(){
-  const tour=t();
-  if(!state.league&&!tour.done){tour.index=nextMatch(tour);resetBout(readyAt(tour,tour.index,state.fighters,state.now));}
-  else createTournament();
-  save();render();
-}
-function tick(){
-  if(!state.started)return;
-  state.now+=1000;
-  state.fighters.forEach(f=>recover(f,state.now));
-  trainOutsideBout(state);
-  const tour=t();
-  if(tour.phase==='result'){
-    if(state.now>=tour.waitUntil)prepareNext();
-  }else if(tour.phase==='waiting'){
-    if(state.now>=tour.waitUntil){
-      tour.startedAt??=state.now;
-      const fs=pair();
-      if(fs.some(f=>!healthy(f,state.now))){
-        const unavailable=fs.findIndex(f=>!healthy(f,state.now));
-        finish(1-unavailable,'Техническое решение: медицинский недопуск');
-      }else{
-        activatePreparedSupport();tour.phase='live';log('Гонг! Бой начался.',true);save();render();
-      }
-    }
-  }else if(tour.phase==='break'){
-    if(state.now>=tour.waitUntil){
-      tour.phase='live';
-      tour.stats.forEach(s=>s.energy=clamp(s.energy+15,0,100));
-      log('Начался следующий раунд.',true);
-    }
-  }else{
-    tour.elapsed++;
-    // Таймер обновляется каждую секунду, события — только раз в три секунды.
-    if(tour.elapsed%3===0){
-      const [a,b]=pair(),e=event(a,b,...tour.stats,...tour.points,state.now);
-      const atk=e.side===0?a:b,def=e.side===0?b:a;
-      log(e.hit?`${atk.name}: попадание −${e.damage.toFixed(1)} HP.${e.injury?' '+e.injury.severity+' травма у '+def.name+' ('+statNames[e.injury.stat]+').':''}`:`${def.name} уходит от атаки ${atk.name}.`,!!e.injury);
-      const cs=$$('.combatant');
-      cs.forEach(el=>el.classList.remove('attack','hit'));
-      void $('#combatants').offsetWidth;
-      cs[e.side]?.classList.add('attack');
-      if(e.hit)cs[1-e.side]?.classList.add('hit');
-      if(e.stopped){finish(e.side,e.injury?.severity==='Тяжёлая'?'Остановка из-за травмы':'Технический нокаут');return;}
-      if(tour.round===4&&e.hit){finish(e.side,'Дополнительный раунд');return;}
-    }
-    if(tour.elapsed>=60){
-      if(tour.round>=3){
-        const diff=tour.stats[0].damage-tour.stats[1].damage;
-        if(Math.abs(diff)<.00001){tour.round=4;tour.elapsed=0;log('Равный счёт. Дополнительный раунд до первого попадания.',true);}
-        else{finish(diff>0?0:1,'Решение по нанесённому урону');return;}
-      }else{
-        tour.round++;tour.elapsed=0;tour.phase='break';tour.waitUntil=state.now+10000;log('Перерыв между раундами.');
-      }
-    }
-  }
-  renderFight();
-  updateBetForm();
-  if(++tickCount%4===0){renderRoster();save();}
-}
 function likeButton(f,extra=''){
   const liked=state.likedFighters.includes(f.id);
   return `<button type="button" class="fighter-like ${extra} ${liked?'liked':''}" data-like="${esc(f.id)}" aria-pressed="${liked}" aria-label="${liked?'Убрать лайк':'Поставить лайк'}: ${esc(f.name)}"><span>${liked?'♥':'♡'}</span> <b>${f.likes||0}</b></button>`;
 }
-function toggleLike(id){
-  const f=fighter(id);if(!f)return;
-  const liked=state.likedFighters.includes(id);
-  if(liked){state.likedFighters=state.likedFighters.filter(v=>v!==id);f.likes=Math.max(0,(f.likes||0)-1);}
-  else{state.likedFighters.push(id);f.likes=(f.likes||0)+1;}
-  save();renderRoster();
-  if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');
+async function toggleLike(id){
+  try{await channel.send({type:'like',fighterId:id,liked:!state.likedFighters.includes(id)});}catch(error){toast(error.message);}
 }
 function renderRoster(){
   const search=$('#search').value.toLowerCase(),sort=$('#sort').value;
@@ -217,12 +108,12 @@ function openBet(tournamentId,fighterId,amount=500){
   const ticket={tournamentId,fighterId,quote,odds:selection.odds};activeBet=ticket;
   $('#bet-amount').oninput=updateBetForm;
   $('#bet-refresh').onclick=()=>openBet(tournamentId,fighterId,Number($('#bet-amount').value)||500);
-  $('#bet-form').onsubmit=e=>{
+  $('#bet-form').onsubmit=async e=>{
     e.preventDefault();if(activeBet!==ticket)return;
     try{
       const current=findTournament(tournamentId);if(!current)throw Error('Турнир недоступен.');
-      const bet=placeBet(state,current,fighterId,Number($('#bet-amount').value),quote);
-      activeBet=null;save();render();$('#modal').close();toast('Ставка принята: '+money(bet.stake)+' × '+bet.odds.toFixed(2));
+      const {bet}=await channel.send({type:'bet',tournamentId,fighterId,stake:Number($('#bet-amount').value),fingerprint:quote.fingerprint});
+      activeBet=null;render();$('#modal').close();toast('Ставка принята: '+money(bet.stake)+' × '+bet.odds.toFixed(2));
     }catch(error){$('#bet-error').textContent=error.message;}
   };
   updateBetForm();
@@ -266,28 +157,21 @@ function supportFighter(id){
   const p=status.points,future=status.mode==='future',expected=status.key;
   open(`<span class="eyebrow">${future?'ПОДГОТОВКА К СЛЕДУЮЩЕМУ БОЮ':'КОМАНДА ПОДДЕРЖКИ'}</span><h2>В углу ${esc(f.name)}</h2><p>${future?'Очки сохранятся до следующего выступления и усилят бойца с начала боя.':'Усиление действует на текущий бой.'} Собрано: <b>${p} очков</b> · <b>${p>0?'Усилен':'Без поддержки'}</b>.</p><div class="packages">${[1,2,3].map((v,i)=>`<button class="package" data-package="${v}" ${state.balance<v*500?'disabled':''}><span>${['Лёгкая','Средняя','Мощная'][i]}</span><b>${money(v*500)}</b><small>+${v} очк${v===1?'о':'а'} · Усиление</small></button>`).join('')}</div><p class="notice">Списание с игрового баланса. Внешнего списания денег нет. ${future?'Подготовка не сгорает в ожидании боя; после выступления временное усиление закончится.':'Бонус применяется со следующего события.'} 80% суммы поступают бойцу в монеты на развитие, 20% — в казну арены (1 игровой ₽ = 1 ◈). Травмы не лечит. Победа не гарантирована.</p><p>Баланс: ${money(state.balance)} · Количество поддержек не ограничено. ${future?'Поддержать можно и во время восстановления бойца.':'Приём на текущий бой закрывается перед третьим раундом.'}</p><button class="primary" id="support-back">← К профилю бойца</button>`);
   $('#support-back').onclick=()=>profile(id);
-  $$('[data-package]').forEach(b=>b.onclick=()=>{
-    const v=Number(b.dataset.package),current=supportStatus(id);
-    if(expected!==current.key||current.reason){$('#modal').close();toast('Бой изменился или приём уже закрыт. Списания нет.');return;}
-    if(state.balance<v*500)return;
-    state.balance-=v*500;f.total++;
-    creditSupport(state,f,v*500);
-    if(current.mode==='future')f.preparedSupport=(f.preparedSupport||0)+v;
-    else{
-      t().points[current.side]+=v;
-      log(`Команда ${f.name}: +${v} очк. поддержки. Боец усилен.`,true);
-    }
-    trainOutsideBout(state);save();render();$('#modal').close();
-    if(current.mode==='future')profile(id);
-    else toast('Поддержка принята. Спасибо команде!');
+  $$('[data-package]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{
+      await channel.send({type:'support',fighterId:id,points:Number(b.dataset.package),expected});
+      $('#modal').close();
+      if(future)profile(id);else toast('Поддержка принята. Спасибо команде!');
+    }catch(error){b.disabled=false;toast(error.message);}
   });
 }
 async function readImage(file){if(!file)return null;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2*1024*1024)throw Error('Выбери PNG, JPEG или WebP до 2 МБ.');const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=240;canvas.height=240;canvas.getContext('2d').drawImage(bitmap,0,0,240,240);bitmap.close();return canvas.toDataURL('image/webp',.8);}
-function createFighter(){open(`<span class="eyebrow">ТВОЙ БОЕЦ. ТВОЯ ИСТОРИЯ.</span><h2>Заявка в лигу</h2><form id="create-form"><label class="form-field">Имя бойца<input name="name" required maxlength="35" placeholder="Например, Артур Волков"></label><label class="form-field">Описание<textarea name="description" maxlength="240" placeholder="Характер, история, стиль боя"></textarea></label><label class="form-field">Регион или город<span id="region-flag-preview"></span><select name="region"><optgroup label="Республики и регионы">${regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('')}</optgroup><optgroup label="Крупные города">${cities.filter(c=>!regions.includes(c.name)).map(c=>`<option value="${esc(c.name)}">${esc(c.name)} — ${esc(c.region)}</option>`).join('')}</optgroup></select></label><label class="form-field">Аватар<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG, WebP до 2 МБ. Без файла — сгенерированный аватар.</small></label><label class="form-field">Свой флаг региона<input type="file" name="flag" accept="image/png,image/jpeg,image/webp"><small>Без файла — флаг региона, к которому относится выбранный город или республика.</small></label><p class="notice">Создание: 5 500 ₽ с игрового баланса. Начальные характеристики 60 / 60 / 60. Боец будет включён в ближайший подходящий отбор лиги. Покупка не даёт дополнительных характеристик.</p><p id="form-error" class="injury" role="alert"></p><button class="primary" type="submit">Создать за 5 500 ₽ <span>↗</span></button></form>`);$('#create-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{if(state.balance<5500)throw Error('Недостаточно средств на игровом балансе. Пополни баланс кнопкой «+» в шапке.');const fd=new FormData(form),name=String(fd.get('name')).trim();if(name.length<2)throw Error('Введи имя минимум из двух символов.');const avatar=await readImage(fd.get('avatar')?.size?fd.get('avatar'):null),flagImage=await readImage(fd.get('flag')?.size?fd.get('flag'):null);state.fighters.push({id:crypto.randomUUID(),name,description:String(fd.get('description')).trim(),region:fd.get('region'),seed:Math.floor(Math.random()*500),stats:[60,60,60],avatar,flag:flagImage,wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:state.now,readyAt:state.now,total:0,awards:[],own:true});state.balance-=5500;creditCreation(state,5500);save();render();$('#modal').close();toast('Боец создан и включён в состав лиги.');}catch(err){$('#form-error').textContent=err.message;button.disabled=false;}};}
+function createFighter(){open(`<span class="eyebrow">ТВОЙ БОЕЦ. ТВОЯ ИСТОРИЯ.</span><h2>Заявка в лигу</h2><form id="create-form"><label class="form-field">Имя бойца<input name="name" required maxlength="35" placeholder="Например, Артур Волков"></label><label class="form-field">Описание<textarea name="description" maxlength="240" placeholder="Характер, история, стиль боя"></textarea></label><label class="form-field">Регион или город<span id="region-flag-preview"></span><select name="region"><optgroup label="Республики и регионы">${regions.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('')}</optgroup><optgroup label="Крупные города">${cities.filter(c=>!regions.includes(c.name)).map(c=>`<option value="${esc(c.name)}">${esc(c.name)} — ${esc(c.region)}</option>`).join('')}</optgroup></select></label><label class="form-field">Аватар<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG, WebP до 2 МБ. Без файла — сгенерированный аватар.</small></label><label class="form-field">Свой флаг региона<input type="file" name="flag" accept="image/png,image/jpeg,image/webp"><small>Без файла — флаг региона, к которому относится выбранный город или республика.</small></label><p class="notice">Создание: 5 500 ₽ с игрового баланса. Начальные характеристики 60 / 60 / 60. Боец будет включён в ближайший подходящий отбор лиги. Покупка не даёт дополнительных характеристик.</p><p id="form-error" class="injury" role="alert"></p><button class="primary" type="submit">Создать за 5 500 ₽ <span>↗</span></button></form>`);$('#create-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{if(state.balance<5500)throw Error('Недостаточно средств на игровом балансе. Пополни баланс кнопкой «+» в шапке.');const fd=new FormData(form),name=String(fd.get('name')).trim();if(name.length<2)throw Error('Введи имя минимум из двух символов.');const avatar=await readImage(fd.get('avatar')?.size?fd.get('avatar'):null),flagImage=await readImage(fd.get('flag')?.size?fd.get('flag'):null);await channel.send({type:'create',name,description:String(fd.get('description')).trim(),region:fd.get('region'),avatar,flag:flagImage});$('#modal').close();toast('Боец создан и включён в состав лиги.');}catch(err){$('#form-error').textContent=err.message;button.disabled=false;}};}
 document.addEventListener('click',e=>{const like=e.target.closest('[data-like]');if(like){toggleLike(like.dataset.like);return;}const supportButton=e.target.closest('[data-support-fighter]');if(supportButton){supportFighter(supportButton.dataset.supportFighter);return;}const market=e.target.closest('[data-market]');if(market)tournamentMarket(market.dataset.market);const ticket=e.target.closest('[data-ticket]');if(ticket)openBet(ticket.dataset.tournament,ticket.dataset.ticket);const preset=e.target.closest('[data-bet-amount]');if(preset){$('#bet-amount').value=preset.dataset.betAmount;updateBetForm();}const p=e.target.closest('[data-profile]');if(p)profile(p.dataset.profile);const s=e.target.closest('[data-support]');if(s)support(Number(s.dataset.support));});
 
 $('#my-bets').onclick=myBets;
 $('#close-modal').onclick=()=>$('#modal').close();$('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
-$('#start').onclick=()=>{state.started=true;$('#welcome').classList.add('hidden');save();};if(state.started)$('#welcome').classList.add('hidden');
-$('#add').onclick=$('#add-bottom').onclick=createFighter;$('#search').oninput=renderRoster;$('#sort').onchange=renderRoster;$('#topup').onclick=()=>{state.balance+=10000;save();$('#balance').textContent=money(state.balance);toast('На игровой баланс добавлено 10 000 ₽.');};$('#speed-label').textContent='СОБЫТИЯ КАЖДЫЕ 3 СЕК';
-window.addEventListener('pagehide',save);render();setInterval(tick,1000);
+$('#start').onclick=()=>{$('#welcome').classList.add('hidden');try{sessionStorage.setItem('yarost-entered','1');}catch{}};try{if(sessionStorage.getItem('yarost-entered'))$('#welcome').classList.add('hidden');}catch{}
+$('#add').onclick=$('#add-bottom').onclick=createFighter;$('#search').oninput=renderRoster;$('#sort').onchange=renderRoster;$('#topup').onclick=async()=>{try{await channel.send({type:'topup'});toast('На игровой баланс добавлено 10 000 ₽.');}catch(error){toast(error.message);}};$('#speed-label').textContent='СОБЫТИЯ КАЖДЫЕ 3 СЕК';
+ready=true;render();channel.start();
