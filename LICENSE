@@ -1,21 +1,54 @@
-MIT License
+﻿YAROST Non-Commercial License 1.0
 
-Copyright (c) 2026 Vyacheslav Staroverov
+Copyright (c) 2026 Vyacheslav Staroverov (@vstaroverov)
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Permission
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Permission is granted, free of charge, to use, study, copy, modify and
+redistribute this software and its original documentation (the "Software")
+solely for non-commercial purposes, subject to the conditions below.
+
+2. Conditions
+
+All copies and substantial portions of the Software, including modified
+versions, must retain this copyright notice and this license. Modified
+versions must clearly identify that they have been modified. Redistribution
+of the original Software and modifications to it must remain subject to these
+non-commercial restrictions. No recipient may be granted broader rights to
+the original Software than this license permits.
+
+3. Commercial use requires separate permission
+
+Commercial use is not granted by this license. Before any commercial use,
+obtain separate written permission from the copyright holder.
+
+Commercial use includes selling or licensing copies; offering paid access;
+monetizing a deployment through advertising, subscriptions, paid support of
+fighters, in-game purchases or other paid features; and incorporating the
+Software into a commercial product or service. Personal study, education,
+research and free deployments without monetization are permitted, provided
+they are not part of a commercial product or service.
+
+Contact: https://github.com/vstaroverov
+Requests: https://github.com/vstaroverov/arena_combats/issues
+
+4. Third-party materials and trademarks
+
+This license applies only to material for which the copyright holder has the
+right to grant it. Third-party materials remain governed by their respective
+licenses and applicable terms. Consult FLAG_SOURCES.md and CITY_SOURCES.md
+for source information. No trademark rights are granted.
+
+5. Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+This is a source-available license with a non-commercial restriction; it is
+not an OSI-approved Open Source license. All rights not expressly granted
+are reserved.

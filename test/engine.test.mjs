@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {bonus,effective,event,recover,healthy} from '../dist/engine.js';
+const f=()=>({stats:[60,60,60],injuries:[],fatigue:0,restAt:0});
+test('поддержка продолжает усиливать после 9 очков с убывающей отдачей',()=>{assert.equal(bonus(0),0);assert.equal(bonus(3),.06);assert.equal(bonus(9),.09);assert.ok(bonus(12)>bonus(9));assert.ok(bonus(1000)>bonus(12)&&bonus(1000)<.12);assert.ok(bonus(6)-bonus(3)<bonus(3)-bonus(0));assert.equal(bonus(-3),0);});
+test('травмы, усталость, усиление и бесплатное восстановление',()=>{const a=f();a.fatigue=.1;a.injuries=[{stat:0,penalty:.2,until:7200000,severity:'Тяжёлая'},{stat:0,penalty:.2,until:1800000,severity:'Лёгкая'}];assert.ok(Math.abs(effective(a,9,100)[0]-60*.75*.9*1.09)<1e-8);assert.equal(healthy(a,100),false);recover(a,7200001);assert.equal(a.fatigue,0);assert.equal(a.injuries.length,0);assert.equal(healthy(a,7200001),true);assert.deepEqual(effective(a,0,7200001),[60,60,60]);});
+test('попадание может завершить бой тяжёлой травмой',()=>{const a=f(),b=f(),sa={hp:100,energy:100,damage:0},sb={...sa};const rolls=[0,0,.5,0,.99,.5];const e=event(a,b,sa,sb,0,0,100,()=>rolls.shift());assert.equal(e.stopped,true);assert.equal(e.injury.severity,'Тяжёлая');assert.equal(b.injuries.length,1);assert.ok(sb.hp<100);assert.equal(a.injuries.length,0);});
+test('здоровье и энергия остаются в допустимых границах',()=>{const a=f(),b=f(),sa={hp:100,energy:100,damage:0},sb={...sa};for(let i=0;i<1000;i++){event(a,b,sa,sb,9,0,100);for(const s of [sa,sb]){assert.ok(s.hp>=0&&s.hp<=100);assert.ok(s.energy>=0&&s.energy<=100);}}});

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101211">
+<title>ЯРОСТЬ — браузерная игра про бои и турниры</title>
+<meta name="description" content="Наблюдай за виртуальными боями, поддерживай бойцов и развивай их навыки. Городские отборы, региональные турниры и Кубок мира в браузерной игре «ЯРОСТЬ».">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="ЯРОСТЬ">
+<meta property="og:title" content="ЯРОСТЬ — браузерная игра про бои и турниры">
+<meta property="og:description" content="Виртуальные бойцы, автоматические бои и путь от городских отборов до Кубка мира. Поддерживай свою команду и развивай бойцов.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ЯРОСТЬ — бойцовская лига в браузере">
+<meta name="twitter:description" content="Следи за турнирами, поддерживай бойцов и развивай их навыки в браузерной игре «ЯРОСТЬ».">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="icon" href="assets/icon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
+<link rel="manifest" href="site.webmanifest">
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="bets.css"><link rel="stylesheet" href="economy.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"VideoGame","name":"ЯРОСТЬ","alternateName":"ЯРОСТЬ — бойцовская лига","description":"Браузерная игра с автоматическими виртуальными боями, турнирами, поддержкой и развитием бойцов.","inLanguage":"ru","genre":["Спортивный симулятор","Стратегия"],"gamePlatform":"Web browser","operatingSystem":"Any","applicationCategory":"GameApplication","playMode":"https://schema.org/SinglePlayer","characterAttribute":[{"@type":"Thing","name":"Сила"},{"@type":"Thing","name":"Ловкость"},{"@type":"Thing","name":"Выносливость"}]}
+</script>
+</head>
+<body><div id="welcome"><div class="welcome-inner"><span class="eyebrow">НЕПРЕРЫВНАЯ ЛИГА ВИРТУАЛЬНЫХ БОЙЦОВ</span><h2 class="welcome-title">ТВОЙ ГОЛОС.<br>ИХ <em>ПОБЕДА.</em></h2><p>Выбери бойца. Следи за турниром. Поддержи в решающий момент.</p><button class="primary" id="start">Войти на арену <span>↗</span></button></div><div class="welcome-mark">Я<span>РО</span>СТЬ</div></div>
+<header><a class="brand" href="#">ЯРОСТЬ<span>БОЙЦОВСКАЯ ЛИГА</span></a><div class="wallet"><span>ИГРОВОЙ БАЛАНС</span><b id="balance"></b><button id="topup" title="Получить 10 000 игровых рублей">＋</button></div></header>
+<main><div class="page-heading"><div><span class="eyebrow" id="season-label"><i class="live-dot"></i> СЕЗОН 01 / АРЕНА ОНЛАЙН</span><h1>ЯРОСТЬ — лига виртуальных бойцов<span>.</span></h1><p class="league-intro">Браузерная игра с автоматическими боями: от городских отборов до Кубка мира. Поддерживай бойцов и развивай их навыки.</p></div></div>
+<div class="arena-bank"><div><span>КАЗНА АРЕНЫ</span><b id="arena-coins">0 ◈</b></div><div><span>ВЫПЛАЧЕНО БОЙЦАМ</span><b id="arena-prizes">0 ◈</b></div></div><div class="betting-strip"><span>Поставь на чемпиона до начала турнира</span><button id="my-bets">Мои ставки (0)</button></div><div class="layout"><aside id="roster"><div class="panel-head"><h2>Бойцы <span id="count"></span></h2><button class="icon-btn" id="add" title="Добавить своего бойца">＋</button></div><div class="roster-controls"><input id="search" placeholder="Имя, регион или город" aria-label="Поиск бойца"><select id="sort" aria-label="Порядок бойцов"><option value="rating">По рейтингу</option><option value="wins">По победам</option><option value="likes">По лайкам</option><option value="own">Сначала мои</option></select></div><div id="fighters"></div><div class="aside-note">Собери свою историю в лиге.<button id="add-bottom">＋ Создать бойца <span>5 500 ₽</span></button></div></aside>
+<section class="center" id="arena" aria-label="Текущий виртуальный бой"><div class="arena-top"><span><i class="live-dot"></i> <b id="phase-label">В ПРЯМОМ ЭФИРЕ</b></span><span id="match-title"></span></div><div class="arena-stage"><div class="arena-grid"></div><div class="octagon"></div><div class="arena-watermark">ЯРОСТЬ</div><div class="round"><span id="round-label"></span><strong id="clock"></strong></div><div id="combatants"></div><div id="announcement" aria-live="polite"></div><div class="arena-footer"><span>ВИРТУАЛЬНЫЙ ОКТАГОН</span><span id="speed-label">СОБЫТИЯ КАЖДЫЕ 3 СЕК</span></div></div><div id="fight-bars"></div><div class="event-panel"><div class="panel-head"><h2>Хроника боя</h2><span class="muted">LIVE FEED</span></div><div id="events" role="log" aria-live="polite"></div></div><div class="bracket-panel"><div class="panel-head"><h2>Турнирная сетка</h2><span id="tournament-name"></span></div><p id="betting-hint" class="betting-hint"></p><div id="bracket"></div></div></section>
+<aside class="right"><div class="panel-head"><h2>Календарь</h2><span class="muted" id="calendar-season">СЕЗОН 01</span></div><div id="schedule"></div><div class="support-info"><span class="eyebrow">ВЛИЯЙ НА ХОД БОЯ</span><h3>За каждым бойцом<br>стоит его команда.</h3><p>Поддержка усиливает характеристики на один бой. В следующем всё начинается заново.</p><div><b>∞</b><span>поддержка без лимита<br>усилен к следующему бою</span></div></div><div class="panel-head history-head"><h2>Последние бои</h2></div><div id="history"></div></aside></div></main>
+<section class="viewer-strip" aria-label="Зрители арены"><div><i class="live-dot"></i><span>Зрителей на арене</span><b id="viewer-count">—</b></div><div><span>Смотрят текущий бой</span><b id="fight-viewer-count">—</b></div><small id="viewers-state">Подключение к арене…</small></section><footer><b>ЯРОСТЬ</b><span>Виртуальные бойцы. Настоящие эмоции.</span></footer><dialog id="modal"><button id="close-modal" class="close" aria-label="Закрыть">×</button><div id="modal-content"></div></dialog><div id="toast" role="status"></div><script type="module" src="app.js"></script><script type="module" src="viewers.js"></script></body></html>
