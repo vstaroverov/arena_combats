@@ -6,12 +6,15 @@ import {gzipSync} from 'node:zlib';
 import {PresenceStore} from './presence.mjs';
 import {GameStore} from './store.mjs';
 import {IdentityStore,hash} from './identity.mjs';
+import {Maintenance} from './maintenance.mjs';
 
 const root=path.resolve(fileURLToPath(new URL('./dist/',import.meta.url)));
 export function startServer({port=Number(process.env.PORT||4173),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN,dbPath=process.env.WORLD_DB||fileURLToPath(new URL('./data/world.sqlite',import.meta.url)),clock=()=>Date.now(),autoTick=true,trustProxy=process.env.TRUST_PROXY==='1'}={}){
   const publicOrigin=origin?new URL(origin).origin:null;
-  const store=new GameStore(dbPath,clock()),accounts=new IdentityStore(store),presence=new PresenceStore();let closing=false;
+  const store=new GameStore(dbPath,clock()),accounts=new IdentityStore(store,clock()),maintenance=new Maintenance(store),presence=new PresenceStore();let closing=false;
+  maintenance.run(clock(),true);let nextMaintenanceCheck=clock()+60000;
   function advance(){
+    if(clock()>=nextMaintenanceCheck){maintenance.run(clock());nextMaintenanceCheck=clock()+60000;}
     // Bounded catch-up after a restart; no open browser is required.
     if(store.game.state.now+1000>clock())return;
     store.transaction(game=>{for(let i=0;i<10&&game.state.now+1000<=clock();i++)game.tick();});
@@ -30,9 +33,9 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     return /^[a-f0-9]{64}$/.test(token||'')?hash(token):null;
   }
   function identity(req,res,create=false){
-    const digest=tokenHash(req),id=digest&&accounts.resolve(digest);
+    const digest=tokenHash(req),id=digest&&accounts.resolve(digest,clock());
     if(id)return id;if(!create)return null;
-    if(digest&&accounts.retired(digest))return null;
+    if(digest&&accounts.retired(digest,clock()))return null;
     const guest=accounts.create(clock());setCookie(res,guest.token);return guest.id;
   }
   function address(req){
@@ -49,7 +52,7 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     let url;try{url=new URL(req.url,'http://localhost');}catch{res.writeHead(400);res.end();return;}
     const allowedOrigin=req.headers.origin===`http://${req.headers.host}`||Boolean(publicOrigin&&req.headers.origin===publicOrigin);
     if(req.method==='POST'&&!allowedOrigin){json(req,res,403,{error:'Недопустимый источник запроса.'});return;}
-    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.1.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.2.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
     if(['/api/account','/api/account/saved','/api/account/login'].includes(url.pathname)){
       const method=url.pathname==='/api/account'?'GET':'POST';
       if(req.method!==method){json(req,res,405,{});return;}

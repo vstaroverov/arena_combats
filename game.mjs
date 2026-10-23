@@ -4,6 +4,7 @@ import {regions} from './dist/regions.js';
 import {cities} from './dist/cities.js';
 import {placeBet} from './dist/betting.js';
 import {creditSupport,creditCreation,trainOutsideBout} from './dist/economy.js';
+import {prunePlayer} from './retention.mjs';
 
 const validRegions=new Set([...regions,...cities.map(c=>c.name)]);
 function image(value){
@@ -23,7 +24,7 @@ export class Game {
   }
   view(id){
     const p=this.player(id),{players,balance,bets,likedFighters,...publicWorld}=this.state;
-    return {...publicWorld,balance:p.balance,bets:p.bets,likedFighters:p.likedFighters,
+    return {...publicWorld,balance:p.balance,bets:p.bets,likedFighters:p.likedFighters,archivedBets:p.archivedBets||null,
       fighters:this.state.fighters.map(({ownerId,...f})=>({...f,own:ownerId===id})),
       serverTime:Date.now(),sharedWorld:true,viewerId:id};
   }
@@ -57,6 +58,7 @@ export class Game {
       if(p.balance>1000000)throw Error('На балансе достаточно игровых средств.');
       p.balance+=10000;p.lastTopup=s.now;result.message='Добавлено 10 000 игровых ₽';
     }else if(a.type==='bet'){
+      if(p.bets.filter(b=>b.status==='open').length>=500)throw Error('У тебя уже 500 открытых ставок. Дождись результатов турниров.');
       const t=s.league.events.find(t=>t.id===a.tournamentId);
       if(!t)throw Error('Турнир недоступен.');
       const wallet={...p,fighters:s.fighters,now:s.now};
@@ -74,7 +76,7 @@ export class Game {
       s.fighters.push({id:fighterId,name,description,region:a.region,avatar,flag,seed:Math.floor(Math.random()*500),stats:[60,60,60],wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:s.now,readyAt:s.now,total:0,awards:[],ownerId:id,preparedSupport:0,likes:0});
       p.balance-=5500;creditCreation(s,5500);result={message:'Боец создан и включён в состав лиги',fighterId};
     }else throw Error('Неизвестное действие.');
-    p.receipts.push({id:a.requestId,result});p.receipts=p.receipts.slice(-200);
+    p.receipts.push({id:a.requestId,result,at:s.now});prunePlayer(p,s.now);
     s.revision++;return result;
   }
 }

@@ -4,6 +4,7 @@ import {startSeason,selectEvent,upgradeBracket,completeMatch,nextMatch,readyAt} 
 import {event,recover,healthy,clamp} from './dist/engine.js';
 import {settleBets} from './dist/betting.js';
 import {ensureEconomy,awardBout,trainOutsideBout} from './dist/economy.js';
+import {prunePlayer,pruneAwards} from './retention.mjs';
 const names=['Артём','Тимур','Руслан','Марат','Александр','Денис','Алан','Роман','Дамир','Максим','Сергей','Адам','Виктор','Илья','Михаил','Андрей'];
 const surnames=['Соколов','Волков','Громов','Орлов','Морозов','Белов','Северин','Титов','Миронов','Лебедев','Савин','Ковалёв','Крылов'];
 const nicknames=['Шторм','Север','Барс','Гранит','Искра','Титан','Вихрь','Сокол'];
@@ -66,9 +67,9 @@ export function createWorld(saved,now=Date.now()){
     winner.rating+=change;loser.rating=Math.max(100,loser.rating-change);
     for(const f of [a,b]){f.fatigue=Math.min(.15,f.fatigue+.05);f.restAt=state.now;f.readyAt=state.now+600000;}
     completeMatch(tour,winner.id);
-    Object.values(state.players).forEach(p=>{p.now=state.now;settleBets(p,tour);});
+    Object.values(state.players).forEach(p=>{p.now=state.now;settleBets(p,tour);prunePlayer(p,state.now);});
     if(tour.done){
-      state.cup++;winner.awards.push(tour.name+' · сезон '+(tour.season||state.season||1));
+      state.cup++;winner.awardCount=(winner.awardCount||winner.awards.length)+1;winner.awards.push(tour.name+' · сезон '+(tour.season||state.season||1));pruneAwards(winner);
       state.champions.unshift({name:winner.name,cup:tour.name});state.champions=state.champions.slice(0,20);
     }
     state.history.unshift({winner:winner.name,loser:loser.name,reason,cup:tour.name});state.history=state.history.slice(0,30);

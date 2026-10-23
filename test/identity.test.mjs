@@ -86,7 +86,7 @@ test('GUID, блокировка и сессии переживают реста
     assert.equal(auth.accountRow(id).guid,guid);assert.equal(auth.resolve(hash(oldToken)),id);
     assert.equal(auth.login(digest,'203.0.113.10',guid,101000).status,429);
     const recovered=auth.login(digest,'203.0.113.10',guid,100000+86400000);assert.equal(recovered.ok,true);
-    assert.equal(auth.resolve(hash(recovered.token)),id);assert.equal(store.game.player(id).balance,12345);
+    assert.equal(auth.resolve(hash(recovered.token),100000+86400000),id);assert.equal(store.game.player(id).balance,12345);
   }finally{store.close();clean(dir);}
 });
 

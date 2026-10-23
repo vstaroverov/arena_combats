@@ -1,31 +1,48 @@
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
+import {RETENTION} from './retention.mjs';
 
 export const hash=value=>createHash('sha256').update(value).digest('hex');
 const DAY=24*60*60*1000;
 const GUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export class IdentityStore {
-  constructor(store){
+  constructor(store,now=Date.now()){
     this.store=store;this.db=store.db;
     this.db.exec(`CREATE TABLE IF NOT EXISTS accounts(player_id TEXT PRIMARY KEY, guid TEXT NOT NULL UNIQUE, saved INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, player_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS retired_sessions(token_hash TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS login_blocks(block_key TEXT PRIMARY KEY, until_ms INTEGER NOT NULL);`);
+    // Add expiration to existing sessions without invalidating current visitors.
+    store.transaction(()=>{
+      if(!this.db.prepare('PRAGMA table_info(accounts)').all().some(c=>c.name==='last_seen_at'))this.db.exec('ALTER TABLE accounts ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0');
+      this.db.prepare('UPDATE accounts SET last_seen_at=? WHERE last_seen_at=0').run(now);
+      for(const table of ['sessions','retired_sessions']){
+        if(!this.db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='expires_at'))this.db.exec(`ALTER TABLE ${table} ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0`);
+        const days=table==='sessions'?RETENTION.sessionDays:RETENTION.retiredSessionDays;
+        this.db.prepare(`UPDATE ${table} SET expires_at=? WHERE expires_at=0`).run(now+days*DAY);
+        this.db.exec(`CREATE INDEX IF NOT EXISTS ${table}_expiry ON ${table}(expires_at)`);
+      }
+      this.db.exec('CREATE INDEX IF NOT EXISTS login_blocks_expiry ON login_blocks(until_ms)');
+    });
     // Upgrade existing guest wallets without changing their owner IDs or cookies.
     const missing=Object.keys(store.game.state.players).filter(id=>!this.accountRow(id));
     if(missing.length)store.transaction(()=>{for(const id of missing){
-      this.db.prepare('INSERT INTO accounts VALUES(?,?,0,?)').run(id,randomUUID(),Date.now());
-      if(/^[a-f0-9]{64}$/.test(id))this.db.prepare('INSERT OR IGNORE INTO sessions VALUES(?,?)').run(id,id);
+      this.db.prepare('INSERT INTO accounts VALUES(?,?,0,?,?)').run(id,randomUUID(),now,now);
+      if(/^[a-f0-9]{64}$/.test(id))this.db.prepare('INSERT OR IGNORE INTO sessions VALUES(?,?,?)').run(id,id,now+RETENTION.sessionDays*DAY);
     }});
   }
   accountRow(id){return this.db.prepare('SELECT * FROM accounts WHERE player_id=?').get(id);}
-  resolve(tokenHash){return this.db.prepare('SELECT player_id FROM sessions WHERE token_hash=?').get(tokenHash)?.player_id||null;}
-  retired(tokenHash){return !!this.db.prepare('SELECT 1 FROM retired_sessions WHERE token_hash=?').get(tokenHash);}
+  resolve(tokenHash,now=Date.now()){
+    const row=this.db.prepare('SELECT s.player_id,a.last_seen_at FROM sessions s JOIN accounts a ON a.player_id=s.player_id WHERE s.token_hash=? AND s.expires_at>?').get(tokenHash,now);
+    if(row&&now-row.last_seen_at>=900000)this.db.prepare('UPDATE accounts SET last_seen_at=? WHERE player_id=?').run(now,row.player_id);
+    return row?.player_id||null;
+  }
+  retired(tokenHash,now=Date.now()){return !!this.db.prepare('SELECT 1 FROM retired_sessions WHERE token_hash=? AND expires_at>?').get(tokenHash,now);}
   create(now){
     const token=randomBytes(32).toString('hex'),id=randomUUID();
     this.store.transaction(game=>{
-      game.player(id);this.db.prepare('INSERT INTO accounts VALUES(?,?,0,?)').run(id,randomUUID(),now);
-      this.db.prepare('INSERT INTO sessions VALUES(?,?)').run(hash(token),id);
+      game.player(id);this.db.prepare('INSERT INTO accounts VALUES(?,?,0,?,?)').run(id,randomUUID(),now,now);
+      this.db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(hash(token),id,now+RETENTION.sessionDays*DAY);
     });
     return {token,id};
   }
@@ -51,9 +68,11 @@ export class IdentityStore {
         return {ok:false,status:401,blockedUntil:until};
       }
       const token=randomBytes(32).toString('hex');
-      this.db.prepare('INSERT INTO sessions VALUES(?,?)').run(hash(token),account.player_id);
+      game.player(account.player_id);
+      this.db.prepare('UPDATE accounts SET last_seen_at=? WHERE player_id=?').run(now,account.player_id);
+      this.db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(hash(token),account.player_id,now+RETENTION.sessionDays*DAY);
       this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash);
-      this.db.prepare('INSERT OR IGNORE INTO retired_sessions VALUES(?)').run(tokenHash);
+      this.db.prepare('INSERT OR IGNORE INTO retired_sessions VALUES(?,?)').run(tokenHash,now+RETENTION.retiredSessionDays*DAY);
       game.state.revision++;
       return {ok:true,token,id:account.player_id};
     });
