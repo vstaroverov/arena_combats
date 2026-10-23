@@ -11,10 +11,17 @@ test('интерфейс отправляет поддержку, лайк, ст
   globalThis.document={querySelector:el,querySelectorAll:s=>s==='[data-package]'?packages:[],addEventListener:(name,fn)=>handlers.set(name,fn)};
   globalThis.window={};globalThis.sessionStorage={getItem(){return null;},setItem(){}};
   globalThis.setInterval=fn=>{intervals.push(fn);};globalThis.setTimeout=()=>0;
-  let offline=false;
+  let offline=false,viewer='a',codeSaved=false;
+  const codes={a:randomUUID(),b:randomUUID()};
   globalThis.fetch=async(url,options={})=>{
     if(offline)throw Error('offline');
-    if(url==='/api/state')return {ok:true,json:async()=>structuredClone(game.view('a'))};
+    if(url==='/api/state')return {ok:true,json:async()=>structuredClone(game.view(viewer))};
+    if(url==='/api/account')return {ok:true,json:async()=>({code:codes[viewer],saved:codeSaved,blockedUntil:0,serverTime:Date.now()})};
+    if(url==='/api/account/saved'){codeSaved=true;return {ok:true,json:async()=>({ok:true})};}
+    if(url==='/api/account/login'){
+      if(JSON.parse(options.body).code!==codes.b)return {ok:false,status:401,json:async()=>({error:'Неверный код',blockedUntil:Date.now()+86400000,serverTime:Date.now()})};
+      viewer='b';return {ok:true,json:async()=>({state:structuredClone(game.view(viewer)),account:{code:codes.b,saved:true,blockedUntil:0,serverTime:Date.now()}})};
+    }
     const a=JSON.parse(options.body);requests.push(a);
     try{const result=game.action('a',a);return {ok:true,json:async()=>({result,state:structuredClone(game.view('a'))})};}
     catch(error){return {ok:false,status:400,json:async()=>({error:error.message})};}
@@ -39,5 +46,11 @@ test('интерфейс отправляет поддержку, лайк, ст
     assert.equal(requests.at(-1).type,'create');assert.equal(game.view('b').fighters.at(-1).name,'Новый участник');
     offline=true;await intervals[0]();assert.match(el('#connection-state').textContent,/Связь потеряна/);assert.equal(game.state.now,before);
     offline=false;await intervals[0]();assert.match(el('#connection-state').textContent,/подключено/);
+    await el('#account').onclick();assert.ok(el('#modal-content').innerHTML.includes(codes.a));
+    await el('#save-code').onclick();assert.equal(codeSaved,true);
+    el('#guid-login-code').value=codes.b;await el('#guid-login-form').onsubmit({preventDefault(){}});
+    assert.equal(viewer,'b');assert.ok(el('#modal-content').innerHTML.includes(codes.b));assert.match(el('#balance').textContent,/13.?500/);
+    el('#guid-login-code').value='wrong';await el('#guid-login-form').onsubmit({preventDefault(){}});
+    assert.match(el('#guid-login-error').textContent,/заблокирован/);assert.equal(el('#guid-login-submit').disabled,true);assert.equal(el('#guid-login-code').disabled,true);
   }finally{Object.assign(globalThis,original);}
 });

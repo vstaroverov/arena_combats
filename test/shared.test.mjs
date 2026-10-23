@@ -12,10 +12,10 @@ import {quoteTournament} from '../dist/betting.js';
 const action=(g,id,a)=>g.action(id,{requestId:randomUUID(),...a});
 const current=g=>g.state.tournament.matches[g.state.tournament.index].ids;
 function cleanup(dir){
-  for(const file of readdirSync(dir)){
+  for(const file of readdirSync(dir))if(/\.sqlite(?:-wal|-shm)?$/i.test(file)){
     try{unlinkSync(path.join(dir,file));}catch(error){if(error.code!=='ENOENT')throw error;}
   }
-  rmdirSync(dir);
+  try{rmdirSync(dir);}catch(error){if(error.code!=='ENOTEMPTY')throw error;}
 }
 
 test('один серверный цикл ведёт мир без браузеров и сохраняет корректную сетку',()=>{

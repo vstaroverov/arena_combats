@@ -2,15 +2,15 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {randomBytes,createHash} from 'node:crypto';
 import {gzipSync} from 'node:zlib';
 import {PresenceStore} from './presence.mjs';
 import {GameStore} from './store.mjs';
+import {IdentityStore,hash} from './identity.mjs';
 
 const root=path.resolve(fileURLToPath(new URL('./dist/',import.meta.url)));
-export function startServer({port=Number(process.env.PORT||4173),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN,dbPath=process.env.WORLD_DB||fileURLToPath(new URL('./data/world.sqlite',import.meta.url)),clock=()=>Date.now(),autoTick=true}={}){
+export function startServer({port=Number(process.env.PORT||4173),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN,dbPath=process.env.WORLD_DB||fileURLToPath(new URL('./data/world.sqlite',import.meta.url)),clock=()=>Date.now(),autoTick=true,trustProxy=process.env.TRUST_PROXY==='1'}={}){
   const publicOrigin=origin?new URL(origin).origin:null;
-  const store=new GameStore(dbPath,clock()),presence=new PresenceStore();let closing=false;
+  const store=new GameStore(dbPath,clock()),accounts=new IdentityStore(store),presence=new PresenceStore();let closing=false;
   function advance(){
     // Bounded catch-up after a restart; no open browser is required.
     if(store.game.state.now+1000>clock())return;
@@ -22,13 +22,22 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     let body=Buffer.from(JSON.stringify(value));
     if(body.length>2048&&/\bgzip\b/.test(req.headers['accept-encoding']||'')){body=gzipSync(body);res.setHeader('Content-Encoding','gzip');}res.end(body);
   };
+  function setCookie(res,token){
+    res.setHeader('Set-Cookie',`yarost_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000${publicOrigin?.startsWith('https:')?'; Secure':''}`);
+  }
+  function tokenHash(req){
+    const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('yarost_session='))?.slice(15);
+    return /^[a-f0-9]{64}$/.test(token||'')?hash(token):null;
+  }
   function identity(req,res,create=false){
-    let token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('yarost_session='))?.slice(15);
-    if(!/^[a-f0-9]{64}$/.test(token||'')){
-      if(!create)return null;token=randomBytes(32).toString('hex');
-      res.setHeader('Set-Cookie',`yarost_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000${publicOrigin?.startsWith('https:')?'; Secure':''}`);
-    }
-    return createHash('sha256').update(token).digest('hex');
+    const digest=tokenHash(req),id=digest&&accounts.resolve(digest);
+    if(id)return id;if(!create)return null;
+    if(digest&&accounts.retired(digest))return null;
+    const guest=accounts.create(clock());setCookie(res,guest.token);return guest.id;
+  }
+  function address(req){
+    // Trust only a single controlled reverse proxy; use the last appended hop.
+    return trustProxy&&req.headers['x-forwarded-for']?String(req.headers['x-forwarded-for']).split(',').at(-1).trim():req.socket.remoteAddress;
   }
   async function readJSON(req,max=450000){
     if(!req.headers['content-type']?.startsWith('application/json'))throw Error('Ожидается JSON.');
@@ -40,11 +49,24 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     let url;try{url=new URL(req.url,'http://localhost');}catch{res.writeHead(400);res.end();return;}
     const allowedOrigin=req.headers.origin===`http://${req.headers.host}`||Boolean(publicOrigin&&req.headers.origin===publicOrigin);
     if(req.method==='POST'&&!allowedOrigin){json(req,res,403,{error:'Недопустимый источник запроса.'});return;}
-    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.0.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.1.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(['/api/account','/api/account/saved','/api/account/login'].includes(url.pathname)){
+      const method=url.pathname==='/api/account'?'GET':'POST';
+      if(req.method!==method){json(req,res,405,{});return;}
+      const id=identity(req,res);if(!id){json(req,res,401,{error:'Сначала подключись к арене.'});return;}
+      if(closing){json(req,res,503,{error:'Арена временно недоступна.'});return;}
+      try{
+        if(url.pathname==='/api/account'){json(req,res,200,accounts.info(id,tokenHash(req),address(req),clock()));return;}
+        if(url.pathname==='/api/account/saved'){accounts.markSaved(id);json(req,res,200,{ok:true});return;}
+        const body=await readJSON(req,2048),result=accounts.login(tokenHash(req),address(req),body.code,clock());
+        if(!result.ok){res.setHeader('Retry-After',String(Math.ceil((result.blockedUntil-clock())/1000)));json(req,res,result.status,{error:result.status===401?'Неверный GUID-код. Вход по коду заблокирован на 24 часа.':'Вход по GUID-коду временно заблокирован.',blockedUntil:result.blockedUntil,serverTime:clock()});return;}
+        setCookie(res,result.token);json(req,res,200,{state:store.game.view(result.id),account:accounts.info(result.id,hash(result.token),address(req),clock())});
+      }catch(error){json(req,res,400,{error:error.message});}return;
+    }
     if(url.pathname==='/api/state'){
       if(req.method!=='GET'){json(req,res,405,{});return;}
       if(closing){json(req,res,503,{error:'Арена временно недоступна.'});return;}
-      try{const id=identity(req,res,true);if(!store.game.state.players[id])store.transaction(game=>game.player(id));json(req,res,200,store.game.view(id));}
+      try{const id=identity(req,res,true);if(!id){json(req,res,409,{error:'Сессия изменилась. Обнови страницу.'});return;}if(!store.game.state.players[id])store.transaction(game=>game.player(id));json(req,res,200,store.game.view(id));}
       catch(error){console.error('State failed:',error.message);json(req,res,503,{error:'Не удалось загрузить арену.'});}return;
     }
     if(url.pathname==='/api/action'){

@@ -13,7 +13,7 @@ const coins=n=>new Intl.NumberFormat('ru-RU').format(n)+' ◈';
 const statNames=['Сила','Ловкость','Выносливость'];
 let state,toastTimer,activeProfile=null,activeBet=null;
 let ready=false,lastAnimation=null;
-const channel=createChannel(next=>{state=next;if(ready){render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.0.0 · '+text;});
+const channel=createChannel(next=>{const switched=state?.viewerId&&state.viewerId!==next.viewerId;state=next;if(ready){if(switched){activeProfile=null;activeBet=null;$('#modal').close();}render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.1.0 · '+text;});
 $('#start').disabled=true;
 await channel.initial();
 $('#start').disabled=false;
@@ -30,6 +30,33 @@ function portrait(f,large=false){if(f.avatar)return `<div class="portrait"><img 
 function flag(f){const region=cityRegions[f.region]||f.region,src=f.flag||flags[region]?.src;return src?`<img class="flag" src="${esc(src)}" alt="Флаг: ${esc(region)}" title="${esc(region)}">`:`<span class="flag" title="Флаг не указан">—</span>`;}
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4000);}
 function open(html){activeProfile=null;activeBet=null;$('#modal-content').innerHTML=html;if(!$('#modal').open)$('#modal').showModal();$('#modal').scrollTop=0;$('#modal-content').scrollTop=0;}
+async function accountMenu(onlyUnsaved=false){
+  try{
+    const info=await channel.account();if(onlyUnsaved&&info.saved)return;
+    showAccount(info);
+  }catch(error){toast(error.message);}
+}
+function blockMessage(until,serverTime=Date.now()){
+  const minutes=Math.max(1,Math.ceil((until-serverTime)/60000));
+  return `Вход по GUID заблокирован до ${new Date(until).toLocaleString('ru-RU')} (осталось около ${minutes} мин.). Просмотр арены и текущий профиль доступны.`;
+}
+function showAccount(info){
+  const blocked=info.blockedUntil>info.serverTime;
+  open(`<span class="eyebrow">ЛИЧНЫЙ ПРОФИЛЬ</span><h2>Твой GUID-код</h2><p>Сохрани этот код: он вернёт доступ к твоему балансу, ставкам и бойцам с другого устройства или после очистки cookie.</p><label class="form-field">Код доступа<input id="account-code" class="guid-code" readonly value="${esc(info.code)}" autocomplete="off" spellcheck="false"></label><div class="account-actions"><button type="button" id="copy-code" class="primary">Скопировать код</button><button type="button" id="save-code" class="bet-refresh">Я сохранил код</button></div><p class="notice">Код — ключ от профиля. Не передавай его другим и не публикуй: любой, кто его знает, сможет войти от твоего имени.</p><hr><h3>Войти с другого устройства</h3><p>Вставь ранее сохранённый GUID. Текущий профиль останется отдельным: балансы и бойцы не объединяются. Сначала сохрани текущий код, если хочешь вернуться к этому профилю.</p><p class="injury">Один неверный код блокирует вход по GUID на 24 часа для этого браузера и IP. Блокировка действует и после очистки cookie. Просмотр арены остаётся доступен.</p><form id="guid-login-form"><label class="form-field">Сохранённый GUID<input id="guid-login-code" required maxlength="80" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" spellcheck="false" ${blocked?'disabled':''}></label><p id="guid-login-error" role="status">${blocked?esc(blockMessage(info.blockedUntil,info.serverTime)):''}</p><button id="guid-login-submit" class="primary" type="submit" ${blocked?'disabled':''}>Войти по коду</button></form>`);
+  $('#copy-code').onclick=async()=>{
+    try{await navigator.clipboard.writeText(info.code);toast('GUID скопирован. Сохрани его в надёжном месте.');}
+    catch{$('#account-code').focus();$('#account-code').select();toast('Выдели и скопируй код вручную.');}
+  };
+  $('#save-code').onclick=async()=>{try{await channel.saved();$('#save-code').textContent='Код сохранён';toast('Код всегда можно посмотреть в меню «Мой GUID».');}catch(error){toast(error.message);}};
+  $('#guid-login-form').onsubmit=async e=>{
+    e.preventDefault();const button=$('#guid-login-submit');button.disabled=true;
+    try{const account=await channel.login($('#guid-login-code').value);showAccount(account);toast('Вход выполнен. Баланс и бойцы восстановлены.');}
+    catch(error){
+      $('#guid-login-error').textContent=error.blockedUntil?blockMessage(error.blockedUntil,error.serverTime):error.message;
+      if(error.blockedUntil)$('#guid-login-code').disabled=true;else button.disabled=false;
+    }
+  };
+}
 function supportStatus(id){
   const side=match().ids.indexOf(id);
   const mode=side>=0&&t().phase!=='result'&&t().round<3?'current':'future';
@@ -172,6 +199,8 @@ document.addEventListener('click',e=>{const like=e.target.closest('[data-like]')
 
 $('#my-bets').onclick=myBets;
 $('#close-modal').onclick=()=>$('#modal').close();$('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
-$('#start').onclick=()=>{$('#welcome').classList.add('hidden');try{sessionStorage.setItem('yarost-entered','1');}catch{}};try{if(sessionStorage.getItem('yarost-entered'))$('#welcome').classList.add('hidden');}catch{}
+$('#start').onclick=()=>{$('#welcome').classList.add('hidden');try{sessionStorage.setItem('yarost-entered','1');}catch{}accountMenu(true);};try{if(sessionStorage.getItem('yarost-entered'))$('#welcome').classList.add('hidden');}catch{}
+$('#account').onclick=()=>accountMenu();
 $('#add').onclick=$('#add-bottom').onclick=createFighter;$('#search').oninput=renderRoster;$('#sort').onchange=renderRoster;$('#topup').onclick=async()=>{try{await channel.send({type:'topup'});toast('На игровой баланс добавлено 10 000 ₽.');}catch(error){toast(error.message);}};$('#speed-label').textContent='СОБЫТИЯ КАЖДЫЕ 3 СЕК';
 ready=true;render();channel.start();
+try{if(sessionStorage.getItem('yarost-entered'))accountMenu(true);}catch{}

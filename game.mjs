@@ -25,7 +25,7 @@ export class Game {
     const p=this.player(id),{players,balance,bets,likedFighters,...publicWorld}=this.state;
     return {...publicWorld,balance:p.balance,bets:p.bets,likedFighters:p.likedFighters,
       fighters:this.state.fighters.map(({ownerId,...f})=>({...f,own:ownerId===id})),
-      serverTime:Date.now(),sharedWorld:true};
+      serverTime:Date.now(),sharedWorld:true,viewerId:id};
   }
   tick(){this.world.tick();this.state.revision++;}
   action(id,request){
