@@ -39,7 +39,14 @@ test('интерфейс отправляет поддержку, лайк, ст
     click('[data-support-fighter]',{supportFighter:id});await packages[1].onclick();
     assert.equal(requests.at(-1).type,'support');assert.equal(game.player('a').paidBalanceMinor,1400000);
     assert.deepEqual(game.state.tournament.points,[2,0]);
+    assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}"`),'current fight has like buttons');
     click('[data-like]',{like:id});await new Promise(setImmediate);assert.equal(game.world.fighter(id).likes,1);
+    assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}" aria-pressed="true"`));
+    click('[data-like]',{like:id});await new Promise(setImmediate);assert.equal(game.world.fighter(id).likes,0);
+    assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}" aria-pressed="false"`));
+    click('[data-like]',{like:id});await new Promise(setImmediate);assert.equal(game.world.fighter(id).likes,1);
+    game.world.fighter(id).simulatedLikes=7;await intervals[0]();
+    assert.match(el('#fight-bars').innerHTML,/Симуляция: ♥ 7/);assert.equal(game.world.fighter(id).likes,1);
     game.action('b',{type:'support',requestId:randomUUID(),fighterId:id,points:3,expected:game.world.supportStatus(id).key});
     await intervals[0]();assert.match(el('#fight-bars').innerHTML,/5 очк/);
     const before=game.state.now;await intervals[0]();assert.equal(game.state.now,before,'браузер не запускает симуляцию');

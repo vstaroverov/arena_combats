@@ -60,3 +60,22 @@ test('presence API reports virtual spectators separately from measured visitors'
     const live=await count();assert.equal(live.online,1);assert.equal(live.watching,1);assert.equal(live.simulation.watching,7856);
   }finally{await app.close();}
 });
+
+test('simulated likes accumulate once, survive reload and stay separate from user likes',()=>{
+  const previousRandom=Math.random;Math.random=()=>.5;
+  try{
+    let g=new Game(null,1700000000000);const tour=()=>g.state.tournament;
+    tour().phase='live';tour().stats.forEach(s=>s.hp=10000);
+    const id=tour().matches[tour().index].ids[1];g.world.fighter(id).likes=1;
+    const beforePlayers=JSON.stringify(g.state.players);
+    for(let i=0;i<15;i++)g.tick();
+    assert.equal(g.world.fighter(id).simulatedLikes,2);
+    const next=tour().virtualLikeAt;
+    g=new Game(JSON.parse(JSON.stringify(g.state)));
+    assert.equal(tour().virtualLikeAt,next);g.tick();assert.equal(g.world.fighter(id).simulatedLikes,2);
+    while(g.state.now<next)g.tick();assert.equal(g.world.fighter(id).simulatedLikes,4);
+    assert.equal(g.world.fighter(id).likes,1);assert.equal(JSON.stringify(g.state.players),beforePlayers);
+    tour().phase='result';tour().waitUntil=g.state.now+30000;
+    for(let i=0;i<20;i++)g.tick();assert.equal(g.world.fighter(id).simulatedLikes,4);
+  }finally{Math.random=previousRandom;}
+});

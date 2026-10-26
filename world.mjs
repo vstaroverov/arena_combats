@@ -60,7 +60,7 @@ export function createWorld(saved,now=Date.now()){
     if(!selection){state.season=(state.league.season||1)+1;state.league=startSeason(state.fighters,state.season,state.now);selection=selectEvent(state.league,state.fighters,state.now);}
     state.tournament=selection.t;resetBout(selection.at);
   }
-  function resetBout(at){const tour=state.tournament;tour.points=[0,0];tour.simulatedPoints=[0,0];tour.virtualRound=null;tour.round=1;tour.elapsed=0;tour.stats=[{hp:100,energy:100,damage:0},{hp:100,energy:100,damage:0}];tour.logs=[];tour.phase='waiting';tour.waitUntil=Math.max(state.now+15000,at);}
+  function resetBout(at){const tour=state.tournament;tour.points=[0,0];tour.simulatedPoints=[0,0];tour.virtualRound=null;tour.virtualLikeAt=null;tour.round=1;tour.elapsed=0;tour.stats=[{hp:100,energy:100,damage:0},{hp:100,energy:100,damage:0}];tour.logs=[];tour.phase='waiting';tour.waitUntil=Math.max(state.now+15000,at);}
   if(!state.tournament)createTournament();
   const t=()=>state.tournament;
   const match=()=>t().matches[t().index];
@@ -123,6 +123,12 @@ export function createWorld(saved,now=Date.now()){
       }
       tour.simulatedPoints??=[0,0];
       const plan=tour.virtualRound;
+      tour.virtualLikeAt??=state.now+8000+Math.floor(Math.random()*11000);
+      if(state.now>=tour.virtualLikeAt){
+        const f=pair()[Math.random()<.5?0:1];
+        f.simulatedLikes=(f.simulatedLikes||0)+1+Math.floor(Math.random()*3);
+        tour.virtualLikeAt=state.now+8000+Math.floor(Math.random()*11000);
+      }
       while(plan.events[plan.cursor]?.at<=tour.elapsed){
         const {side}=plan.events[plan.cursor++],f=pair()[side];
         tour.points[side]++;tour.simulatedPoints[side]++;
