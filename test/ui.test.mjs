@@ -40,7 +40,12 @@ test('интерфейс отправляет поддержку, лайк, ст
     assert.equal(requests.at(-1).type,'support');assert.equal(game.player('a').paidBalanceMinor,1400000);
     assert.deepEqual(game.state.tournament.points,[2,0]);
     assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}"`),'current fight has like buttons');
+    assert.match(el('#fight-bars').innerHTML,/Лайк · бесплатно/);
+    assert.match(el('#fight-bars').innerHTML,/Поддержки бойца за всё время: <b>1<\/b>/);
+    assert.match(el('#fight-bars').innerHTML,/Пользователи: 2 очк. · симуляция: 0 очк./);
+    const walletBeforeLike=game.player('a').paidBalanceMinor,freeBeforeLike=game.player('a').balance;
     click('[data-like]',{like:id});await new Promise(setImmediate);assert.equal(game.world.fighter(id).likes,1);
+    assert.equal(game.player('a').paidBalanceMinor,walletBeforeLike);assert.equal(game.player('a').balance,freeBeforeLike);
     assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}" aria-pressed="true"`));
     click('[data-like]',{like:id});await new Promise(setImmediate);assert.equal(game.world.fighter(id).likes,0);
     assert.ok(el('#fight-bars').innerHTML.includes(`data-like="${id}" aria-pressed="false"`));
