@@ -15,7 +15,7 @@ const coins=n=>new Intl.NumberFormat('ru-RU').format(n)+' ◈';
 const statNames=['Сила','Ловкость','Выносливость'];
 let state,toastTimer,activeProfile=null,activeBet=null;
 let ready=false,lastAnimation=null;
-const channel=createChannel(next=>{const switched=state?.viewerId&&state.viewerId!==next.viewerId;state=next;if(ready){if(switched){activeProfile=null;activeBet=null;$('#modal').close();}render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.3.4 · '+text;});
+const channel=createChannel(next=>{const switched=state?.viewerId&&state.viewerId!==next.viewerId;state=next;if(ready){if(switched){activeProfile=null;activeBet=null;$('#modal').close();}render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.3.5 · '+text;});
 $('#start').disabled=true;
 await channel.initial();
 $('#start').disabled=false;

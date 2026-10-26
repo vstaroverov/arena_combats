@@ -9,7 +9,6 @@ const names=['Артём','Тимур','Руслан','Марат','Алекса
 const surnames=['Соколов','Волков','Громов','Орлов','Морозов','Белов','Северин','Титов','Миронов','Лебедев','Савин','Ковалёв','Крылов'];
 const nicknames=['Шторм','Север','Барс','Гранит','Искра','Титан','Вихрь','Сокол'];
 
-export const VIRTUAL_VIEWERS=7856;
 export function virtualSupportPlan(round,rng=Math.random){
   const count=2+Math.floor(rng()*4);
   return {round,cursor:0,events:Array.from({length:count},(_,i)=>({at:5+Math.floor((i+rng())*50/count),side:rng()<.5?0:1}))};

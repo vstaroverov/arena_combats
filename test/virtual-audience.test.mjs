@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../game.mjs';
-import {virtualSupportPlan,VIRTUAL_VIEWERS} from '../world.mjs';
+import {virtualSupportPlan} from '../world.mjs';
+import {simulatedPresence} from '../presence.mjs';
 import {startServer} from '../server.mjs';
 
 test('virtual audience schedules 2–5 spaced supports within each round',()=>{
-  assert.equal(VIRTUAL_VIEWERS,7856);
   for(const value of [0,.25,.5,.999999]){
     const plan=virtualSupportPlan(2,()=>value);
     assert.equal(plan.events.length,2+Math.floor(value*4));
@@ -45,7 +45,8 @@ test('virtual supports persist across reload, affect combat, and never credit do
 });
 
 test('presence API reports virtual spectators separately from measured visitors',async()=>{
-  const app=startServer({port:0,dbPath:':memory:',autoTick:false});
+  const now=Date.parse('2026-10-26T08:00:00+03:00');
+  const app=startServer({port:0,dbPath:':memory:',autoTick:false,clock:()=>now});
   await new Promise(r=>app.server.once('listening',r));
   const base=`http://127.0.0.1:${app.server.address().port}`;
   try{
@@ -55,9 +56,9 @@ test('presence API reports virtual spectators separately from measured visitors'
       const r=await fetch(base+'/api/presence',{method:'POST',headers:{cookie,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({tabId:'virtual-test-tab',visitorId:'test-visitor',online:true,watching:true,fightId:state.tournament.id+':'+state.tournament.index})});
       assert.equal(r.status,200);return r.json();
     };
-    const waiting=await count();assert.equal(waiting.online,1);assert.equal(waiting.simulation.online,7856);assert.equal(waiting.simulation.watching,0);
+    const waiting=await count();assert.equal(waiting.online,1);assert.deepEqual(waiting.simulation,simulatedPresence(now,'waiting'));assert.equal(waiting.simulation.watching,0);
     app.store.transaction(g=>{g.state.tournament.phase='live';});
-    const live=await count();assert.equal(live.online,1);assert.equal(live.watching,1);assert.equal(live.simulation.watching,7856);
+    const live=await count();assert.equal(live.online,1);assert.equal(live.watching,1);assert.deepEqual(live.simulation,simulatedPresence(now,'live'));
   }finally{await app.close();}
 });
 
