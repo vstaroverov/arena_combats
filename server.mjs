@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {gzipSync} from 'node:zlib';
 import {PresenceStore} from './presence.mjs';
+import {VIRTUAL_VIEWERS} from './world.mjs';
 import {GameStore} from './store.mjs';
 import {IdentityStore,hash} from './identity.mjs';
 import {Maintenance} from './maintenance.mjs';
@@ -61,7 +62,7 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     }
     const allowedOrigin=req.headers.origin===`http://${req.headers.host}`||Boolean(publicOrigin&&req.headers.origin===publicOrigin);
     if(req.method==='POST'&&!allowedOrigin){json(req,res,403,{error:'Недопустимый источник запроса.'});return;}
-    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.3.1',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.3.2',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
     if(url.pathname==='/api/payments'||/^\/api\/payments\/[a-f0-9-]{36}\/check$/i.test(url.pathname)){
       const id=identity(req,res);if(!id){json(req,res,401,{error:'Войди в свой профиль.'});return;}
       if(closing){json(req,res,503,{error:'Сервер перезапускается.'});return;}
@@ -100,7 +101,7 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     }
     if(url.pathname==='/api/presence'){
       if(req.method!=='POST'){json(req,res,405,{});return;}
-      try{const body=await readJSON(req,2048),id=identity(req,res);if(!id)throw Error('Нет сессии');const t=store.game.state.tournament,fightId=t.id+':'+t.index;json(req,res,200,presence.update({...body,visitorId:id,watching:body.watching&&body.fightId===fightId}));}
+      try{const body=await readJSON(req,2048),id=identity(req,res);if(!id)throw Error('Нет сессии');const t=store.game.state.tournament,fightId=t.id+':'+t.index;json(req,res,200,{...presence.update({...body,visitorId:id,watching:body.watching&&body.fightId===fightId}),simulation:{online:VIRTUAL_VIEWERS,watching:['live','break'].includes(t.phase)?VIRTUAL_VIEWERS:0}});}
       catch{json(req,res,400,{});}return;
     }
     if(url.pathname.startsWith('/api/')){json(req,res,404,{});return;}

@@ -13,9 +13,12 @@ async function heartbeat(){
     const response=await fetch('/api/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(currentPresence()),cache:'no-store'});
     if(!response.ok)throw Error();const counts=await response.json();
     onlineCount.textContent=counts.online;fightCount.textContent=counts.watching;
+    document.querySelector('#virtual-viewer-count').textContent=Number(counts.simulation?.online||0).toLocaleString('ru-RU');
+    document.querySelector('#virtual-fight-viewer-count').textContent=Number(counts.simulation?.watching||0).toLocaleString('ru-RU');
     document.querySelector('#viewers-state').textContent='Обновляется онлайн';
   }catch{
     onlineCount.textContent='—';fightCount.textContent='—';
+    document.querySelector('#virtual-viewer-count').textContent='—';document.querySelector('#virtual-fight-viewer-count').textContent='—';
     document.querySelector('#viewers-state').textContent='Счётчик временно недоступен';
   }finally{busy=false;}
 }

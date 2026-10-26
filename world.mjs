@@ -9,6 +9,12 @@ const names=['Артём','Тимур','Руслан','Марат','Алекса
 const surnames=['Соколов','Волков','Громов','Орлов','Морозов','Белов','Северин','Титов','Миронов','Лебедев','Савин','Ковалёв','Крылов'];
 const nicknames=['Шторм','Север','Барс','Гранит','Искра','Титан','Вихрь','Сокол'];
 
+export const VIRTUAL_VIEWERS=7856;
+export function virtualSupportPlan(round,rng=Math.random){
+  const count=2+Math.floor(rng()*4);
+  return {round,cursor:0,events:Array.from({length:count},(_,i)=>({at:5+Math.floor((i+rng())*50/count),side:rng()<.5?0:1}))};
+}
+
 function fresh(){const now=Date.now();return {version:1,now,balance:15000,started:false,season:1,cup:0,history:[],champions:[],fighters:regions.map((region,i)=>{const a=45+i*7%31,b=Math.max(100-a,Math.min(140-a,50+i*11%21));return {id:'r'+i,name:names[i%names.length]+' '+surnames[(i*3+Math.floor(i/16))%surnames.length],nickname:nicknames[i%8],region,seed:i,stats:[a,b,180-a-b],wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:now,readyAt:now,total:0,awards:[],own:false};}),tournament:null};}
 
 export function createWorld(saved,now=Date.now()){
@@ -54,7 +60,7 @@ export function createWorld(saved,now=Date.now()){
     if(!selection){state.season=(state.league.season||1)+1;state.league=startSeason(state.fighters,state.season,state.now);selection=selectEvent(state.league,state.fighters,state.now);}
     state.tournament=selection.t;resetBout(selection.at);
   }
-  function resetBout(at){const tour=state.tournament;tour.points=[0,0];tour.round=1;tour.elapsed=0;tour.stats=[{hp:100,energy:100,damage:0},{hp:100,energy:100,damage:0}];tour.logs=[];tour.phase='waiting';tour.waitUntil=Math.max(state.now+15000,at);}
+  function resetBout(at){const tour=state.tournament;tour.points=[0,0];tour.simulatedPoints=[0,0];tour.virtualRound=null;tour.round=1;tour.elapsed=0;tour.stats=[{hp:100,energy:100,damage:0},{hp:100,energy:100,damage:0}];tour.logs=[];tour.phase='waiting';tour.waitUntil=Math.max(state.now+15000,at);}
   if(!state.tournament)createTournament();
   const t=()=>state.tournament;
   const match=()=>t().matches[t().index];
@@ -110,6 +116,19 @@ export function createWorld(saved,now=Date.now()){
       }
     }else{
       tour.elapsed++;
+      if(tour.virtualRound?.round!==tour.round){
+        tour.virtualRound=virtualSupportPlan(tour.round);
+        // An upgrade during a round must not replay events from its past.
+        while(tour.virtualRound.events[tour.virtualRound.cursor]?.at<tour.elapsed)tour.virtualRound.cursor++;
+      }
+      tour.simulatedPoints??=[0,0];
+      const plan=tour.virtualRound;
+      while(plan.events[plan.cursor]?.at<=tour.elapsed){
+        const {side}=plan.events[plan.cursor++],f=pair()[side];
+        tour.points[side]++;tour.simulatedPoints[side]++;
+        f.simulatedSupportCount=(f.simulatedSupportCount||0)+1;
+        log(`Виртуальный зритель (симуляция) поддержал ${f.name}: +1 очко. Боец усилен.`,true);
+      }
       // Таймер обновляется каждую секунду, события — только раз в три секунды.
       if(tour.elapsed%3===0){
         const [a,b]=pair(),e=event(a,b,...tour.stats,...tour.points,state.now);
