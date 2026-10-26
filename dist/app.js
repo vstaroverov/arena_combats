@@ -30,9 +30,9 @@ function portrait(f,large=false){if(f.avatar)return `<div class="portrait"><img 
 function flag(f){const region=cityRegions[f.region]||f.region,src=f.flag||flags[region]?.src;return src?`<img class="flag" src="${esc(src)}" alt="Флаг: ${esc(region)}" title="${esc(region)}">`:`<span class="flag" title="Флаг не указан">—</span>`;}
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4000);}
 function open(html){activeProfile=null;activeBet=null;$('#modal-content').innerHTML=html;if(!$('#modal').open)$('#modal').showModal();$('#modal').scrollTop=0;$('#modal-content').scrollTop=0;}
-async function accountMenu(onlyUnsaved=false){
+async function accountMenu(){
   try{
-    const info=await channel.account();if(onlyUnsaved&&info.saved)return;
+    const info=await channel.account();
     showAccount(info);
   }catch(error){toast(error.message);}
 }
@@ -199,8 +199,7 @@ document.addEventListener('click',e=>{const like=e.target.closest('[data-like]')
 
 $('#my-bets').onclick=myBets;
 $('#close-modal').onclick=()=>$('#modal').close();$('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
-$('#start').onclick=()=>{$('#welcome').classList.add('hidden');try{sessionStorage.setItem('yarost-entered','1');}catch{}accountMenu(true);};try{if(sessionStorage.getItem('yarost-entered'))$('#welcome').classList.add('hidden');}catch{}
+$('#start').onclick=()=>{$('#welcome').classList.add('hidden');try{sessionStorage.setItem('yarost-entered','1');}catch{}};try{if(sessionStorage.getItem('yarost-entered'))$('#welcome').classList.add('hidden');}catch{}
 $('#account').onclick=()=>accountMenu();
 $('#add').onclick=$('#add-bottom').onclick=createFighter;$('#search').oninput=renderRoster;$('#sort').onchange=renderRoster;$('#topup').onclick=async()=>{try{await channel.send({type:'topup'});toast('На игровой баланс добавлено 10 000 ₽.');}catch(error){toast(error.message);}};$('#speed-label').textContent='СОБЫТИЯ КАЖДЫЕ 3 СЕК';
 ready=true;render();channel.start();
-try{if(sessionStorage.getItem('yarost-entered'))accountMenu(true);}catch{}
