@@ -13,7 +13,7 @@ export function paymentConfig(env=process.env,origin){
   const config={enabled:env.YOOKASSA_ENABLED==='1',mode:env.YOOKASSA_MODE||'test',shopId:env.YOOKASSA_SHOP_ID||'',secret:env.YOOKASSA_SECRET_KEY||'',origin,
     receipts:env.YOOKASSA_RECEIPT_MODE||'payment',vatCode:Number(env.YOOKASSA_VAT_CODE),subject:env.YOOKASSA_PAYMENT_SUBJECT||'',paymentMode:env.YOOKASSA_PAYMENT_MODE||'',taxSystem:env.YOOKASSA_TAX_SYSTEM_CODE?Number(env.YOOKASSA_TAX_SYSTEM_CODE):undefined,
     externalReceipts:env.YOOKASSA_EXTERNAL_RECEIPTS_CONFIRMED==='1'};
-  const fiscal=config.receipts==='payment'?Number.isInteger(config.vatCode)&&config.vatCode>=1&&config.vatCode<=12&&['service','intellectual_activity','payment'].includes(config.subject)&&config.paymentMode==='full_payment':config.receipts==='external'&&config.externalReceipts;
+  const fiscal=config.receipts==='test_no_receipt'?config.mode==='test':config.receipts==='payment'?Number.isInteger(config.vatCode)&&config.vatCode>=1&&config.vatCode<=12&&['service','intellectual_activity','payment'].includes(config.subject)&&config.paymentMode==='full_payment':config.receipts==='external'&&config.externalReceipts;
   const https=origin&&/^https:\/\//.test(origin);
   config.ready=!!(config.enabled&&['test','live'].includes(config.mode)&&/^\d+$/.test(config.shopId)&&config.secret&&https&&fiscal&&(config.taxSystem===undefined||(Number.isInteger(config.taxSystem)&&config.taxSystem>=1&&config.taxSystem<=6)));
   return config;

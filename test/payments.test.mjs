@@ -128,6 +128,22 @@ test('HTTP ЮKassa: уведомления принимаются без Origin,
   }finally{await app.close();}
 });
 
+test('Test checkout can omit receipts; live checkout cannot use the sandbox exemption',async()=>{
+  const env={YOOKASSA_ENABLED:'1',YOOKASSA_MODE:'test',YOOKASSA_SHOP_ID:'12345',YOOKASSA_SECRET_KEY:'fixture-not-a-real-key',YOOKASSA_RECEIPT_MODE:'test_no_receipt'};
+  const c=paymentConfig(env,'https://arena.example');assert.equal(c.ready,true);
+  assert.equal(paymentConfig({...env,YOOKASSA_MODE:'live'},c.origin).ready,false);
+  assert.equal(paymentConfig({...env,YOOKASSA_RECEIPT_MODE:'payment'},c.origin).ready,false);
+  const store=new GameStore(':memory:'),fake=provider(true),payments=new Payments(store,c,{fetcher:fake.fetcher});
+  try{
+    assert.equal(payments.info('a').receiptEmailRequired,false);
+    const order=await payments.create('a',{amount:100,requestId:randomUUID()});
+    assert.equal(order.test,true);assert.equal(order.status,'pending');
+    assert.equal('receipt' in JSON.parse(fake.calls[0].options.body),false);
+    const remote=[...fake.records.values()][0];remote.status='succeeded';remote.paid=true;
+    await payments.sync(order.id,true);assert.equal(store.game.player('a').testPaidBalanceMinor,10000);assert.equal(store.game.player('a').paidBalanceMinor,0);
+  }finally{store.close();}
+});
+
 test('ЮKassa выключена без магазина, HTTPS и согласованных настроек чеков; бесплатные очки не конвертируются',async()=>{
   assert.equal(paymentConfig({},'https://arena.example').ready,false);
   const c=config();c.ready=false;const store=new GameStore(':memory:'),payments=new Payments(store,c,{fetcher:()=>{throw Error('must not call provider');}});
