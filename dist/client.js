@@ -7,7 +7,7 @@ export function createChannel(onState,onStatus){
     status(true,'Единая арена · подключено');return state;
   }
   async function request(url,options={}){
-    const r=await fetch(url,{...options,credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(10000)});
+    const r=await fetch(url,{...options,credentials:'same-origin',cache:'no-store',signal:options.signal||AbortSignal.timeout(10000)});
     const body=await r.json();if(!r.ok){const e=Error(body.error||'Арена временно недоступна.');e.status=r.status;e.blockedUntil=body.blockedUntil;e.serverTime=body.serverTime;throw e;}return body;
   }
   async function refresh(){
@@ -24,6 +24,17 @@ export function createChannel(onState,onStatus){
     start(){setInterval(refresh,1000);},
     account(){return request('/api/account');},
     saved(){return request('/api/account/saved',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});},
+    paymentInfo(){return request('/api/payments');},
+    async checkout(amount,email,requestId){
+      if(busy)throw Error('Дождись завершения предыдущего действия.');busy=true;
+      try{const body=await request('/api/payments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,email,requestId}),signal:AbortSignal.timeout(30000)});adopt(body.state);return body.order;}
+      finally{busy=false;}
+    },
+    async checkPayment(id){
+      if(busy)throw Error('Дождись завершения предыдущего действия.');busy=true;
+      try{const body=await request('/api/payments/'+encodeURIComponent(id)+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(30000)});adopt(body.state);return body.order;}
+      finally{busy=false;}
+    },
     async login(code){
       if(busy)throw Error('Дождись завершения предыдущего действия.');
       busy=true;epoch++;

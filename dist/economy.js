@@ -9,11 +9,12 @@ export function ensureEconomy(state){
 }
 function entry(account,now,text,amount){account.history.unshift({now,text,amount});account.history=account.history.slice(0,40);}
 function arenaCredit(state,amount,type,text){const a=state.arena;a.coins+=amount;a.income+=amount;a[type]+=amount;entry(a,state.now,text,amount);}
-export function creditSupport(state,f,amount){
+export function creditSupport(state,f,amount,paid=false){
   ensureEconomy(state);if(!Number.isSafeInteger(amount)||amount<=0)throw Error('Некорректная сумма поддержки');
   const share=Math.floor(amount*.8),fee=amount-share,e=ensureFighterEconomy(f);
   e.coins+=share;e.donationTotal+=amount;
-  entry(e,state.now,'Поддержка команды: '+amount+' игровых ₽',share);
+  if(paid)e.paidDonationTotal=(e.paidDonationTotal||0)+amount;
+  entry(e,state.now,'Поддержка команды: '+amount+' ₽',share);
   arenaCredit(state,fee,'supportIncome','Доля поддержки · '+f.name);return {fighterCoins:share,arenaCoins:fee};
 }
 export function creditCreation(state,amount){ensureEconomy(state);arenaCredit(state,amount,'creationIncome','Заявка нового бойца');}

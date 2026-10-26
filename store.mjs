@@ -12,7 +12,12 @@ export class GameStore {
     this.db.exec('PRAGMA wal_autocheckpoint=1000; PRAGMA journal_size_limit=8388608');
     const saved=this.db.prepare('SELECT data,generation FROM world WHERE id=1').get();
     this.generation=saved?.generation||0;
-    if(saved){const data=JSON.parse(saved.data);if(data.schemaVersion!==2)throw Error('Unsupported world schema');this.game=new Game(data,now);}
+    if(saved){
+      const data=JSON.parse(saved.data);if(![2,3].includes(data.schemaVersion))throw Error('Unsupported world schema');
+      const migrate=data.schemaVersion===2;
+      this.game=new Game(data,now);
+      if(migrate)this.transaction(()=>{});
+    }
     else{this.game=new Game(null,now);this.persist();}
   }
   persist(){this.db.prepare('INSERT INTO world(id,data,generation) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,generation=excluded.generation').run(JSON.stringify(this.game.state),this.generation);}

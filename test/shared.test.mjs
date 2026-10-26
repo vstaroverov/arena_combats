@@ -9,6 +9,7 @@ import {GameStore} from '../store.mjs';
 import {startServer} from '../server.mjs';
 import {quoteTournament} from '../dist/betting.js';
 
+function fundedGame(){const g=new Game();for(const id of ['a','b'])g.player(id).paidBalanceMinor=1500000;return g;}
 const action=(g,id,a)=>g.action(id,{requestId:randomUUID(),...a});
 const current=g=>g.state.tournament.matches[g.state.tournament.index].ids;
 function cleanup(dir){
@@ -28,10 +29,10 @@ test('один серверный цикл ведёт мир без браузе
 });
 
 test('поддержка общая, баланс личный; повтор запроса не списывает ещё раз',()=>{
-  const g=new Game(),id=current(g)[0],expected=g.world.supportStatus(id).key;
+  const g=fundedGame(),id=current(g)[0],expected=g.world.supportStatus(id).key;
   const request={requestId:randomUUID(),type:'support',fighterId:id,points:3,expected};
   const result=g.action('a',request);assert.deepEqual(g.action('a',request),result);
-  assert.equal(g.view('a').balance,13500);assert.equal(g.view('b').balance,15000);
+  assert.equal(g.view('a').paidBalance,13500);assert.equal(g.view('b').balance,15000);
   assert.deepEqual(g.view('a').tournament,g.view('b').tournament);
   assert.deepEqual(g.state.tournament.points,[3,0]);
   assert.equal(g.world.fighter(id).economy.donationTotal,1500);
@@ -40,7 +41,7 @@ test('поддержка общая, баланс личный; повтор з�
 });
 
 test('подготовка будущего бойца общая и переносится ровно на одно выступление',()=>{
-  const g=new Game(),id=g.state.fighters.find(f=>!current(g).includes(f.id)&&f.id.startsWith('city-')).id;
+  const g=fundedGame(),id=g.state.fighters.find(f=>!current(g).includes(f.id)&&f.id.startsWith('city-')).id;
   const expected=g.world.supportStatus(id).key;
   for(let i=0;i<4;i++)action(g,'a',{type:'support',fighterId:id,points:3,expected});
   assert.equal(g.world.fighter(id).preparedSupport,12);
@@ -51,7 +52,7 @@ test('подготовка будущего бойца общая и перен�
 });
 
 test('сервер отклоняет устаревшую поддержку и пакеты с поддельной суммой',()=>{
-  const g=new Game(),id=current(g)[0],expected=g.world.supportStatus(id).key;
+  const g=fundedGame(),id=current(g)[0],expected=g.world.supportStatus(id).key;
   g.state.tournament.phase='break';g.state.tournament.round=3;
   assert.throws(()=>action(g,'a',{type:'support',fighterId:id,points:3,expected}),/изменился/);
   assert.throws(()=>action(g,'a',{type:'support',fighterId:id,points:-100,expected}),/пакет/);
@@ -59,19 +60,19 @@ test('сервер отклоняет устаревшую поддержку и
 });
 
 test('лайки и бойцы общие, отметки лайка и владения личные',()=>{
-  const g=new Game(),id=current(g)[0];
+  const g=fundedGame(),id=current(g)[0];
   action(g,'a',{type:'like',fighterId:id,liked:true});action(g,'a',{type:'like',fighterId:id,liked:true});
   action(g,'b',{type:'like',fighterId:id,liked:true});assert.equal(g.world.fighter(id).likes,2);
   action(g,'a',{type:'like',fighterId:id,liked:false});assert.equal(g.world.fighter(id).likes,1);
   const {fighterId}=action(g,'a',{type:'create',name:'Новый боец',description:'История',region:'Москва'});
   assert.equal(g.view('a').fighters.find(f=>f.id===fighterId).own,true);
   assert.equal(g.view('b').fighters.find(f=>f.id===fighterId).own,false);
-  assert.equal(g.view('a').balance,9500);assert.equal(g.view('b').balance,15000);
+  assert.equal(g.view('a').paidBalance,9500);assert.equal(g.view('b').balance,15000);
   assert.throws(()=>action(g,'a',{type:'create',name:'Плохой флаг',region:'Москва',flag:'https://example.com/x.svg'}),/изображение/);
 });
 
 test('ставки личные, общий результат выплачивает каждому игроку один раз',()=>{
-  const g=new Game(),t=g.state.tournament,[a,b]=current(g),quote=quoteTournament(t,g.state.fighters,g.state.now);
+  const g=fundedGame(),t=g.state.tournament,[a,b]=current(g),quote=quoteTournament(t,g.state.fighters,g.state.now);
   action(g,'a',{type:'bet',tournamentId:t.id,fighterId:a,stake:500,fingerprint:quote.fingerprint});
   action(g,'b',{type:'bet',tournamentId:t.id,fighterId:b,stake:1000,fingerprint:quote.fingerprint});
   assert.equal(g.view('a').bets.length,1);assert.equal(g.view('b').bets.length,1);
@@ -88,14 +89,14 @@ test('SQLite сохраняет мир, сессии и идемпотентно
   const dir=mkdtempSync(path.join(tmpdir(),'yarost-test-')),db=path.join(dir,'world.sqlite'),copy=path.join(dir,'backup.sqlite');
   let store=new GameStore(db);
   try{
-    const id=current(store.game)[0],req={requestId:randomUUID(),type:'support',fighterId:id,points:2,expected:store.game.world.supportStatus(id).key};
+    store.transaction(g=>{g.player('a').paidBalanceMinor=1500000;});const id=current(store.game)[0],req={requestId:randomUUID(),type:'support',fighterId:id,points:2,expected:store.game.world.supportStatus(id).key};
     store.transaction(g=>g.action('a',req));store.transaction(g=>g.tick());
     const before=JSON.stringify(store.game.state);
     assert.throws(()=>store.transaction(g=>{g.player('a').balance=0;throw Error('failure');}),/failure/);
     assert.equal(JSON.stringify(store.game.state),before);
     store.backup(copy);store.close();store=new GameStore(db);
     assert.equal(JSON.stringify(store.game.state),before);
-    store.transaction(g=>g.action('a',req));assert.equal(store.game.player('a').balance,14000);
+    store.transaction(g=>g.action('a',req));assert.equal(store.game.player('a').paidBalanceMinor,1400000);
     const backup=new GameStore(copy);assert.equal(JSON.stringify(backup.game.state),before);backup.close();
   }finally{store.close();cleanup(dir);}
 });
@@ -107,7 +108,7 @@ test('HTTP: два посетителя видят один бой, действ
   const get=async c=>(await fetch(base+'/api/state',{headers:{cookie:c.cookie}})).json();
   const send=(c,a,origin=base)=>fetch(base+'/api/action',{method:'POST',headers:{cookie:c.cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({requestId:randomUUID(),...a})});
   try{
-    const a=await client(),b=await client();assert.notEqual(a.cookie,b.cookie);assert.deepEqual(a.state.tournament,b.state.tournament);
+    const a=await client(),b=await client();app.store.transaction(g=>{g.player(a.state.viewerId).paidBalanceMinor=1500000;});assert.notEqual(a.cookie,b.cookie);assert.deepEqual(a.state.tournament,b.state.tournament);
     const id=a.state.tournament.matches[a.state.tournament.index].ids[0];
     const response=await send(a,{type:'support',fighterId:id,points:2,expected:app.store.game.world.supportStatus(id).key});assert.equal(response.status,200);
     const bv=await get(b);assert.deepEqual(bv.tournament.points,[2,0]);assert.equal(bv.balance,15000);

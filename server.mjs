@@ -7,12 +7,16 @@ import {PresenceStore} from './presence.mjs';
 import {GameStore} from './store.mjs';
 import {IdentityStore,hash} from './identity.mjs';
 import {Maintenance} from './maintenance.mjs';
+import {Payments,paymentConfig} from './payments.mjs';
 
 const root=path.resolve(fileURLToPath(new URL('./dist/',import.meta.url)));
-export function startServer({port=Number(process.env.PORT||4173),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN,dbPath=process.env.WORLD_DB||fileURLToPath(new URL('./data/world.sqlite',import.meta.url)),clock=()=>Date.now(),autoTick=true,trustProxy=process.env.TRUST_PROXY==='1'}={}){
+export function startServer({port=Number(process.env.PORT||4173),host=process.env.HOST||'127.0.0.1',origin=process.env.PUBLIC_ORIGIN,dbPath=process.env.WORLD_DB||fileURLToPath(new URL('./data/world.sqlite',import.meta.url)),clock=()=>Date.now(),autoTick=true,trustProxy=process.env.TRUST_PROXY==='1',paymentsConfig,paymentFetch=fetch}={}){
   const publicOrigin=origin?new URL(origin).origin:null;
   const store=new GameStore(dbPath,clock()),accounts=new IdentityStore(store,clock()),maintenance=new Maintenance(store),presence=new PresenceStore();let closing=false;
   maintenance.run(clock(),true);let nextMaintenanceCheck=clock()+60000;
+  const payments=new Payments(store,paymentsConfig||paymentConfig(process.env,publicOrigin),{fetcher:paymentFetch,clock});
+  let reconciliation=false;
+  const paymentInterval=autoTick?setInterval(async()=>{if(reconciliation||closing)return;reconciliation=true;try{await payments.reconcile();if(!payments.closed)payments.redact(clock());}catch{/* Durable payment orders will be retried on the next pass. */}finally{reconciliation=false;}},60000):null;
   function advance(){
     if(clock()>=nextMaintenanceCheck){maintenance.run(clock());nextMaintenanceCheck=clock()+60000;}
     // Bounded catch-up after a restart; no open browser is required.
@@ -50,9 +54,24 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
   const server=http.createServer(async(req,res)=>{
     res.setHeader('X-Content-Type-Options','nosniff');
     let url;try{url=new URL(req.url,'http://localhost');}catch{res.writeHead(400);res.end();return;}
+    if(url.pathname==='/api/payments/webhook'){
+      if(req.method!=='POST'){json(req,res,405,{});return;}
+      try{await payments.webhook(await readJSON(req,16384));json(req,res,200,{ok:true});}
+      catch{json(req,res,503,{error:'Не удалось подтвердить уведомление. Повторите позже.'});}return;
+    }
     const allowedOrigin=req.headers.origin===`http://${req.headers.host}`||Boolean(publicOrigin&&req.headers.origin===publicOrigin);
     if(req.method==='POST'&&!allowedOrigin){json(req,res,403,{error:'Недопустимый источник запроса.'});return;}
-    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.2.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.3.0',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/payments'||/^\/api\/payments\/[a-f0-9-]{36}\/check$/i.test(url.pathname)){
+      const id=identity(req,res);if(!id){json(req,res,401,{error:'Войди в свой профиль.'});return;}
+      if(closing){json(req,res,503,{error:'Сервер перезапускается.'});return;}
+      try{
+        if(url.pathname==='/api/payments'&&req.method==='GET'){json(req,res,200,payments.info(id));return;}
+        if(req.method!=='POST'){json(req,res,405,{});return;}
+        const order=url.pathname==='/api/payments'?await payments.create(id,await readJSON(req,2048)):await payments.check(id,url.pathname.split('/')[3]);
+        json(req,res,200,{order,state:store.game.view(id)});
+      }catch(error){json(req,res,400,{error:error.message});}return;
+    }
     if(['/api/account','/api/account/saved','/api/account/login'].includes(url.pathname)){
       const method=url.pathname==='/api/account'?'GET':'POST';
       if(req.method!==method){json(req,res,405,{});return;}
@@ -76,7 +95,7 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
       if(req.method!=='POST'){json(req,res,405,{});return;}
       const id=identity(req,res);if(!id||!store.game.state.players[id]){json(req,res,401,{error:'Сначала подключись к арене.'});return;}
       if(closing||clock()-store.game.state.now>2000){json(req,res,503,{error:'Арена синхронизируется. Попробуй чуть позже.'});return;}
-      try{const action=await readJSON(req);const result=store.transaction(game=>game.action(id,action));json(req,res,200,{result,state:store.game.view(id)});}
+      try{const action=await readJSON(req);const result=payments.action(id,action);json(req,res,200,{result,state:store.game.view(id)});}
       catch(error){json(req,res,400,{error:error.message});}return;
     }
     if(url.pathname==='/api/presence'){
@@ -93,8 +112,8 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     }catch{res.writeHead(404);res.end('Not found');}
   });
   server.requestTimeout=15000;
-  server.on('close',()=>{if(interval)clearInterval(interval);store.close();});server.listen(port,host);
-  return {server,store,advance,close:()=>new Promise(resolve=>server.close(resolve))};
+  server.on('close',()=>{if(interval)clearInterval(interval);if(paymentInterval)clearInterval(paymentInterval);payments.closed=true;store.close();});server.listen(port,host);
+  return {server,store,payments,advance,close:()=>new Promise(resolve=>{closing=true;payments.closed=true;server.close(resolve);})};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const app=startServer();app.server.on('listening',()=>console.log(`ЯРОСТЬ: http://${app.server.address().address}:${app.server.address().port}`));

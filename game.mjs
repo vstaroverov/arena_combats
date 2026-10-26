@@ -15,16 +15,17 @@ function image(value){
 export class Game {
   constructor(saved,now=Date.now()){
     this.world=createWorld(saved,now);
-    this.world.state.schemaVersion=2;
+    this.world.state.schemaVersion=3;
     this.world.state.revision??=0;
   }
   get state(){return this.world.state;}
   player(id){
-    return this.state.players[id]??= {balance:15000,bets:[],betSerial:0,likedFighters:[],receipts:[],lastTopup:0};
+    const p=this.state.players[id]??= {balance:15000,bets:[],betSerial:0,likedFighters:[],receipts:[],lastTopup:0};
+    p.paidBalanceMinor??=0;p.paidTotalInMinor??=0;p.paidSpentMinor??=0;p.testPaidBalanceMinor??=0;p.testPaidTotalInMinor??=0;return p;
   }
   view(id){
     const p=this.player(id),{players,balance,bets,likedFighters,...publicWorld}=this.state;
-    return {...publicWorld,balance:p.balance,bets:p.bets,likedFighters:p.likedFighters,archivedBets:p.archivedBets||null,
+    return {...publicWorld,balance:p.balance,paidBalance:p.paidBalanceMinor/100,testPaidBalance:p.testPaidBalanceMinor/100,bets:p.bets,likedFighters:p.likedFighters,archivedBets:p.archivedBets||null,
       fighters:this.state.fighters.map(({ownerId,...f})=>({...f,own:ownerId===id})),
       serverTime:Date.now(),sharedWorld:true,viewerId:id};
   }
@@ -40,8 +41,8 @@ export class Game {
       if(![1,2,3].includes(a.points))throw Error('Выбери пакет поддержки.');
       const current=world.supportStatus(f.id);
       if(a.expected!==current.key)throw Error('Бой изменился или приём уже закрыт. Списания нет.');
-      const cost=a.points*500;if(p.balance<cost)throw Error('Недостаточно средств на игровом балансе.');
-      p.balance-=cost;f.total++;creditSupport(s,f,cost);
+      const cost=a.points*500;if(p.paidBalanceMinor<cost*100)throw Error('Недостаточно средств на платном балансе. Пополни его через ЮKassa.');
+      p.paidBalanceMinor-=cost*100;p.paidSpentMinor+=cost*100;f.total++;creditSupport(s,f,cost,true);
       if(current.mode==='future')f.preparedSupport+=a.points;
       else{s.tournament.points[current.side]+=a.points;world.log(`Команда ${f.name}: +${a.points} очк. поддержки. Боец усилен.`,true);}
       trainOutsideBout(s);result.message='Поддержка принята';
@@ -70,11 +71,11 @@ export class Game {
       const description=typeof a.description==='string'?a.description.trim():'';
       if(name.length<2||name.length>35||description.length>240)throw Error('Проверь имя и описание.');
       if(!validRegions.has(a.region))throw Error('Выбери регион или город из списка.');
-      if(p.balance<5500)throw Error('Недостаточно средств на игровом балансе.');
+      if(p.paidBalanceMinor<550000)throw Error('Недостаточно средств на платном балансе. Пополни его через ЮKassa.');
       if(s.fighters.filter(f=>f.ownerId===id).length>=10)throw Error('Можно создать до 10 бойцов на посетителя.');
       const avatar=image(a.avatar),flag=image(a.flag),fighterId=randomUUID();
       s.fighters.push({id:fighterId,name,description,region:a.region,avatar,flag,seed:Math.floor(Math.random()*500),stats:[60,60,60],wins:0,losses:0,rating:1000,injuries:[],fatigue:0,restAt:s.now,readyAt:s.now,total:0,awards:[],ownerId:id,preparedSupport:0,likes:0});
-      p.balance-=5500;creditCreation(s,5500);result={message:'Боец создан и включён в состав лиги',fighterId};
+      p.paidBalanceMinor-=550000;p.paidSpentMinor+=550000;creditCreation(s,5500);result={message:'Боец создан и включён в состав лиги',fighterId};
     }else throw Error('Неизвестное действие.');
     p.receipts.push({id:a.requestId,result,at:s.now});prunePlayer(p,s.now);
     s.revision++;return result;

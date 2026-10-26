@@ -36,7 +36,7 @@ export function quoteTournament(t,fighters,now){
 }
 export function placeBet(state,t,fighterId,stake,quote){
   if(!bettingOpen(t))throw Error('Турнир уже начался. Приём ставок закрыт.');
-  if(!Number.isSafeInteger(stake)||stake<100)throw Error('Минимальная ставка — 100 ₽, целым числом.');
+  if(!Number.isSafeInteger(stake)||stake<100)throw Error('Минимальное пари — 100 бесплатных очков, целым числом.');
   if(!Number.isFinite(state.balance)||stake>state.balance)throw Error('Недостаточно средств на игровом балансе.');
   const current=quoteTournament(t,state.fighters,state.now);
   if(current.fingerprint!==quote.fingerprint)throw Error('Состояние бойцов изменилось. Обнови коэффициент перед ставкой.');

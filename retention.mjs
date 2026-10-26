@@ -2,7 +2,7 @@ export const DAY=86400000;
 export const RETENTION={settledBetsDays:30,settledBetsLimit:100,receiptsDays:7,receiptsLimit:200,awardsLimit:50,sessionDays:365,retiredSessionDays:7,emptyGuestDays:30};
 
 export function emptyPlayer(p){
-  return p.balance===15000&&!p.bets?.length&&!p.likedFighters?.length&&!p.receipts?.length&&!p.betSerial&&!p.lastTopup&&!p.archivedBets?.count;
+  return p.balance===15000&&!p.paidBalanceMinor&&!p.paidTotalInMinor&&!p.paidSpentMinor&&!p.testPaidBalanceMinor&&!p.testPaidTotalInMinor&&!p.bets?.length&&!p.likedFighters?.length&&!p.receipts?.length&&!p.betSerial&&!p.lastTopup&&!p.archivedBets?.count;
 }
 
 export function prunePlayer(player,now){

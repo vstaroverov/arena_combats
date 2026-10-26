@@ -42,16 +42,16 @@ test('GUID восстанавливает баланс, ставки и свои
   const app=await boot();
   try{
     const a=await app.guest(),b=await app.guest(),ca=await code(app,a.cookie);
-    const created=await(await app.request('/api/action',a.cookie,{type:'create',requestId:randomUUID(),name:'Личный боец',region:'Москва'})).json();
+    app.store.transaction(g=>{g.player(a.state.viewerId).paidBalanceMinor=1500000;});const created=await(await app.request('/api/action',a.cookie,{type:'create',requestId:randomUUID(),name:'Личный боец',region:'Москва'})).json();
     const id=created.result.fighterId;
     const snapshot=created.state,t=snapshot.tournament,fighterId=t.matches[t.index].ids[0];
     const quote=quoteTournament(t,snapshot.fighters,snapshot.now);
     const bet=await app.request('/api/action',a.cookie,{type:'bet',requestId:randomUUID(),tournamentId:t.id,fighterId,stake:500,fingerprint:quote.fingerprint});assert.equal(bet.status,200);
     const logged=await app.request('/api/account/login',b.cookie,{code:'  '+ca.toUpperCase()+'  '});assert.equal(logged.status,200);
     const newCookie=logged.headers.get('set-cookie').split(';')[0];assert.notEqual(newCookie,b.cookie);
-    const result=await logged.json();assert.equal(result.account.code,ca);assert.equal(result.state.balance,9000);assert.equal(result.state.bets.length,1);
+    const result=await logged.json();assert.equal(result.account.code,ca);assert.equal(result.state.balance,14500);assert.equal(result.state.paidBalance,9500);assert.equal(result.state.bets.length,1);
     assert.equal(result.state.fighters.find(f=>f.id===id).own,true);
-    assert.equal((await(await app.request('/api/state',a.cookie)).json()).balance,9000);
+    assert.equal((await(await app.request('/api/state',a.cookie)).json()).balance,14500);
     assert.equal(await code(app,newCookie),ca);
     const latePoll=await app.request('/api/state',b.cookie);assert.equal(latePoll.status,409);assert.equal(latePoll.headers.get('set-cookie'),null,'старый запрос не перезаписывает новую cookie');
   }finally{await app.close();}
