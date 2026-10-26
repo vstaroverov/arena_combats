@@ -40,7 +40,13 @@ test('интерфейс отправляет поддержку, лайк, ст
     const before=game.state.now;await intervals[0]();assert.equal(game.state.now,before,'браузер не запускает симуляцию');
     click('[data-ticket]',{ticket:id,tournament:game.state.tournament.id});el('#bet-amount').value='500';await el('#bet-form').onsubmit({preventDefault(){}});
     assert.equal(game.player('a').bets.length,1);assert.equal(requests.at(-1).type,'bet');
-    el('#add').onclick();const fields=new Map([['name','Новый участник'],['description','История'],['region','Москва']]);
+    el('#add').onclick();
+    el('#region-search').value='каз';el('#region-search').oninput();assert.match(el('#region-select').innerHTML,/Казань/);assert.doesNotMatch(el('#region-select').innerHTML,/Абакан/);
+    el('#region-search').value='ТАТАРСТАН';el('#region-search').oninput();assert.match(el('#region-select').innerHTML,/Казань/);assert.match(el('#region-select').innerHTML,/Альметьевск/);
+    el('#region-search').value='неизвестный город 12345';el('#region-search').oninput();assert.match(el('#region-results').textContent,/Ничего не найдено/);assert.equal(el('#region-select').value,'');
+    el('#region-search').value='моск';el('#region-search').oninput();assert.match(el('#region-select').innerHTML,/Московская область/);
+    el('#region-select').value='Москва';el('#region-select').onchange();assert.match(el('#region-flag-preview').innerHTML,/Флаг: Москва/);
+    const fields=new Map([['name','Новый участник'],['description','История'],['region','Москва']]);
     globalThis.FormData=class{get(k){return fields.get(k);}};
     await el('#create-form').onsubmit({preventDefault(){},currentTarget:{querySelector:()=>({disabled:false})}});
     assert.equal(requests.at(-1).type,'create');assert.equal(game.view('b').fighters.at(-1).name,'Новый участник');
