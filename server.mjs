@@ -61,7 +61,7 @@ export function startServer({port=Number(process.env.PORT||4173),host=process.en
     }
     const allowedOrigin=req.headers.origin===`http://${req.headers.host}`||Boolean(publicOrigin&&req.headers.origin===publicOrigin);
     if(req.method==='POST'&&!allowedOrigin){json(req,res,403,{error:'Недопустимый источник запроса.'});return;}
-    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.3.5',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
+    if(url.pathname==='/api/health'){json(req,res,closing?503:200,{ok:!closing,version:'2.3.6',revision:store.game.state.revision,catchingUp:clock()-store.game.state.now>2000});return;}
     if(url.pathname==='/api/payments'||/^\/api\/payments\/[a-f0-9-]{36}\/check$/i.test(url.pathname)){
       const id=identity(req,res);if(!id){json(req,res,401,{error:'Войди в свой профиль.'});return;}
       if(closing){json(req,res,503,{error:'Сервер перезапускается.'});return;}

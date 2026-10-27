@@ -1,4 +1,24 @@
-export async function paymentMenu({channel,open,toast,esc,money,getState,accountMenu,checkId}){
+export async function handlePaymentReturn({channel,id,onHome,onStatus,onDone,isCurrent=()=>true,sleep=ms=>new Promise(r=>setTimeout(r,ms)),attempts=6}){
+  onHome();
+  if(!/^[a-f0-9-]{36}$/i.test(id||'')){onStatus('Некорректный номер платежа. Открой историю пополнений для проверки.');return;}
+  onStatus('Проверяем оплату в ЮKassa…');
+  let failed=false;
+  for(let attempt=0;attempt<attempts;attempt++){
+    if(!isCurrent())return;
+    try{
+      const order=await channel.checkPayment(id);if(!isCurrent())return;failed=false;
+      if(order.status==='succeeded'){
+        onDone();onStatus(order.test?'Тестовая оплата подтверждена. Тестовый баланс обновлён и показан в шапке. Боевой баланс не меняется.':'Оплата подтверждена. Платный баланс обновлён.');return order;
+      }
+      if(order.status==='canceled'){onDone();onStatus('Платёж отменён. Зачисления нет.');return order;}
+      if(order.status==='needs_review'){onStatus('Платёж требует проверки администратором. Не оплачивай повторно; проверь историю пополнений.');return order;}
+    }catch{if(!isCurrent())return;failed=true;}
+    if(attempt+1<attempts)await sleep(2000);
+  }
+  onStatus(failed?'Проверка оплаты временно недоступна. Обнови страницу или проверь статус в истории пополнений. Повторно платить не нужно.':'ЮKassa пока обрабатывает платёж. Баланс обновится после подтверждения. Обнови страницу для повторной проверки.');
+}
+
+export async function paymentMenu({channel,open,toast,esc,money,getState,accountMenu,checkId,goHome}){
   const $=s=>document.querySelector(s);
   try{
     if(checkId){
@@ -7,10 +27,10 @@ export async function paymentMenu({channel,open,toast,esc,money,getState,account
     }
     const info=await channel.paymentInfo(),state=getState();
     const labels={creating:'Создаётся',pending:'Ожидает оплаты',waiting_for_capture:'Ожидает подтверждения',succeeded:'Оплачен',canceled:'Отменён',needs_review:'Проверяется администратором'};
-    open(`<span class="eyebrow">ПЛАТНЫЙ БАЛАНС</span><h2>Пополнение через ЮKassa</h2><p>Доступно: <b>${money(state.paidBalance)}</b>. Платный баланс расходуется на поддержку и создание бойцов. В бесплатных пари он не участвует, выигрыши на него не зачисляются.</p>${info.enabled&&info.test?'<p class="notice">Тестовый магазин: реальные деньги не списываются. Тестовые зачисления изолированы и не пополняют боевой баланс.</p>':''}${info.enabled?`<form id="payment-form"><label class="form-field">Сумма пополнения, ₽<input id="payment-amount" type="number" min="${info.min}" max="${info.max}" step="1" required value="500"></label>${info.receiptEmailRequired?'<label class="form-field">Email для чека<input id="payment-email" type="email" maxlength="254" autocomplete="email" required></label>':''}<p>1 ₽ = 1 единица платного баланса. После подтверждения ЮKassa зачислим оплату автоматически.</p><p id="payment-error" class="injury" role="status"></p><button class="primary" id="payment-submit" type="submit">Перейти к оплате 500 ₽</button></form>`:'<p class="notice">Пополнение пока недоступно. Существующий платный баланс сохраняется.</p>'}<p class="notice">Сохрани GUID перед оплатой: он нужен для доступа к профилю после смены устройства или очистки cookie. Данные карты вводятся на странице ЮKassa.</p><button id="payment-account" type="button" class="bet-refresh">Открыть мой GUID</button><h3>Последние пополнения</h3>${info.orders.length?info.orders.map(o=>`<div class="bet-record"><b>${money(o.amount)}${o.test?' · тест':''}</b><p>${labels[o.status]||esc(o.status)}${o.refunded?' · Возвращено '+money(o.refunded):''}</p>${o.confirmationUrl&&['pending','creating'].includes(o.status)?`<a class="bet-refresh" href="${esc(o.confirmationUrl)}" rel="noreferrer">Продолжить оплату ↗</a>`:''}<button type="button" class="bet-refresh" data-payment-check="${esc(o.id)}">Проверить статус</button></div>`).join(''):'<p>Пополнений пока нет.</p>'}`);
+    open(`<span class="eyebrow">ПЛАТНЫЙ БАЛАНС</span><h2>Пополнение через ЮKassa</h2><p>Доступно: <b>${money(state.paidBalance)}</b>. Платный баланс расходуется на поддержку и создание бойцов. В бесплатных пари он не участвует, выигрыши на него не зачисляются.</p>${info.enabled&&info.test?'<p class="notice">Тестовый магазин: реальные деньги не списываются. Тестовые зачисления изолированы и не пополняют боевой баланс.</p><p>Тестовый баланс: <b>'+money(state.testPaidBalance||0)+'</b></p>':''}${info.enabled?`<form id="payment-form"><label class="form-field">Сумма пополнения, ₽<input id="payment-amount" type="number" min="${info.min}" max="${info.max}" step="1" required value="500"></label>${info.receiptEmailRequired?'<label class="form-field">Email для чека<input id="payment-email" type="email" maxlength="254" autocomplete="email" required></label>':''}<p>1 ₽ = 1 единица платного баланса. После подтверждения ЮKassa зачислим оплату автоматически.</p><p id="payment-error" class="injury" role="status"></p><button class="primary" id="payment-submit" type="submit">Перейти к оплате 500 ₽</button></form>`:'<p class="notice">Пополнение пока недоступно. Существующий платный баланс сохраняется.</p>'}<p class="notice">Сохрани GUID перед оплатой: он нужен для доступа к профилю после смены устройства или очистки cookie. Данные карты вводятся на странице ЮKassa.</p><button id="payment-account" type="button" class="bet-refresh">Открыть мой GUID</button><h3>Последние пополнения</h3>${info.orders.length?info.orders.map(o=>`<div class="bet-record"><b>${money(o.amount)}${o.test?' · тест':''}</b><p>${labels[o.status]||esc(o.status)}${o.refunded?' · Возвращено '+money(o.refunded):''}</p>${o.confirmationUrl&&['pending','creating'].includes(o.status)?`<a class="bet-refresh" href="${esc(o.confirmationUrl)}" rel="noreferrer">Продолжить оплату ↗</a>`:''}<button type="button" class="bet-refresh" data-payment-check="${esc(o.id)}">Проверить статус</button></div>`).join(''):'<p>Пополнений пока нет.</p>'}`);
     $('#payment-account').onclick=()=>accountMenu();
     document.querySelectorAll('[data-payment-check]').forEach(button=>button.onclick=async()=>{
-      button.disabled=true;await paymentMenu({channel,open,toast,esc,money,getState,accountMenu,checkId:button.dataset.paymentCheck});
+      button.disabled=true;await paymentMenu({channel,open,toast,esc,money,getState,accountMenu,goHome,checkId:button.dataset.paymentCheck});
     });
     if(!info.enabled)return;
     $('#payment-amount').oninput=()=>{$('#payment-submit').textContent='Перейти к оплате '+money(Number($('#payment-amount').value)||0);};
@@ -23,7 +43,7 @@ export async function paymentMenu({channel,open,toast,esc,money,getState,account
         try{sessionStorage.setItem('yarost-checkout',JSON.stringify(draft));}catch{}
         const order=await channel.checkout(amount,email,draft.id);
         if(order.status==='canceled'){try{sessionStorage.removeItem('yarost-checkout');}catch{}throw Error('Платёж отменён. Можно создать новое пополнение.');}
-        if(order.status==='succeeded'){try{sessionStorage.removeItem('yarost-checkout');}catch{}toast('Оплата уже подтверждена.');await paymentMenu({channel,open,toast,esc,money,getState,accountMenu});return;}
+        if(order.status==='succeeded'){try{sessionStorage.removeItem('yarost-checkout');}catch{}goHome?.();toast(order.test?'Тестовая оплата подтверждена. Тестовый баланс обновлён.':'Оплата уже подтверждена. Баланс обновлён.');return;}
         if(!order.confirmationUrl)throw Error('Платёж проверяется. Нажми «Проверить статус» перед повторной оплатой.');
         window.location.assign(order.confirmationUrl);
       }catch(error){$('#payment-error').textContent=error.message;button.disabled=false;}

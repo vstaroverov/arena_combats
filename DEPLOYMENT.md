@@ -45,9 +45,9 @@ node server.mjs
 ## Docker
 
 ```sh
-docker build -t yarost:2.3.5 .
+docker build -t yarost:2.3.6 .
 docker volume create yarost-data
-docker run -d --name yarost --restart unless-stopped -p 127.0.0.1:3000:3000 -e PUBLIC_ORIGIN=https://game.example.com -e TRUST_PROXY=1 -v yarost-data:/app/data yarost:2.3.5
+docker run -d --name yarost --restart unless-stopped -p 127.0.0.1:3000:3000 -e PUBLIC_ORIGIN=https://game.example.com -e TRUST_PROXY=1 -v yarost-data:/app/data yarost:2.3.6
 ```
 
 Повторно использовать **тот же volume** при замене контейнера. Без постоянного тома удаление контейнера может привести к потере мира. Образ в текущей среде не собирался.

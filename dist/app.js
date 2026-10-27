@@ -1,4 +1,4 @@
-import {paymentMenu} from './payment-ui.js';
+import {paymentMenu,handlePaymentReturn} from './payment-ui.js';
 import {mountRegionPicker} from './region-picker.js';
 import {createChannel} from './client.js';
 import {cityRegions} from './cities.js';
@@ -15,7 +15,7 @@ const coins=n=>new Intl.NumberFormat('ru-RU').format(n)+' ◈';
 const statNames=['Сила','Ловкость','Выносливость'];
 let state,toastTimer,activeProfile=null,activeBet=null;
 let ready=false,lastAnimation=null;
-const channel=createChannel(next=>{const switched=state?.viewerId&&state.viewerId!==next.viewerId;state=next;if(ready){if(switched){activeProfile=null;activeBet=null;$('#modal').close();}render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.3.5 · '+text;});
+const channel=createChannel(next=>{const switched=state?.viewerId&&state.viewerId!==next.viewerId;state=next;if(ready){if(switched){activeProfile=null;activeBet=null;$('#modal').close();}render();animateEvent();updateBetForm();if(activeProfile&&$('#modal').open)$('#profile-likes').innerHTML=likeButton(fighter(activeProfile),'profile-like');}},(ok,text)=>{const el=$('#connection-state');el.textContent=text;el.dataset.online=String(ok);$('#welcome-status').textContent='2.3.6 · '+text;});
 $('#start').disabled=true;
 await channel.initial();
 $('#start').disabled=false;
@@ -115,7 +115,7 @@ function renderCalendar(){
   const more=$('#calendar-more');if(more)more.onclick=()=>{calendarLimit+=8;renderCalendar();};
 }
 function render(){
-  renderRoster();renderFight();renderCalendar();$('#balance').textContent=points(state.balance);$('#paid-balance').textContent=money(state.paidBalance);
+  renderRoster();renderFight();renderCalendar();$('#balance').textContent=points(state.balance);$('#paid-balance').textContent=money(state.paidBalance);$('#test-paid-wallet').hidden=!state.testPaidBalance;$('#test-paid-balance').textContent=money(state.testPaidBalance||0);
   const season=state.league?.season||state.season||1;
   $('#season-label').innerHTML='<i class="live-dot"></i> СЕЗОН '+season+' / АРЕНА ОНЛАЙН';
   $('#calendar-season').textContent='СЕЗОН '+season;
@@ -206,5 +206,14 @@ $('#account').onclick=()=>accountMenu();
 $('#add').onclick=$('#add-bottom').onclick=createFighter;$('#search').oninput=renderRoster;$('#sort').onchange=renderRoster;$('#topup').onclick=()=>showPayments();$('#free-topup').onclick=async()=>{try{await channel.send({type:'topup'});toast('Добавлено 10 000 бесплатных игровых очков.');}catch(error){toast(error.message);}};$('#speed-label').textContent='СОБЫТИЯ КАЖДЫЕ 3 СЕК';
 ready=true;render();channel.start();
 
-function showPayments(checkId){return paymentMenu({channel,open,toast,esc,money,getState:()=>state,accountMenu,checkId});}
-if(typeof location!=='undefined'){const id=new URL(location.href).searchParams.get('payment_return');if(id){showPayments(id);history.replaceState(null,'',location.pathname+location.hash);}}
+function paymentHome(){$('#welcome').classList.add('hidden');$('#modal').close();activeProfile=null;activeBet=null;try{sessionStorage.setItem('yarost-entered','1');}catch{}}
+function showPayments(checkId){return paymentMenu({channel,open,toast,esc,money,getState:()=>state,accountMenu,checkId,goHome:paymentHome});}
+if(typeof location!=='undefined'){
+  const url=new URL(location.href),id=url.searchParams.get('payment_return');
+  if(id){
+    const viewer=state.viewerId;
+    void handlePaymentReturn({channel,id,onHome:paymentHome,isCurrent:()=>state.viewerId===viewer,
+      onStatus:text=>{const el=$('#payment-return-status');el.hidden=false;el.textContent=text;},
+      onDone:()=>{try{sessionStorage.removeItem('yarost-checkout');}catch{}url.searchParams.delete('payment_return');history.replaceState(null,'',url.pathname+url.search+url.hash);}});
+  }
+}

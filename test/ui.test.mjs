@@ -5,7 +5,7 @@ import {Game} from '../game.mjs';
 
 test('интерфейс отправляет поддержку, лайк, ставку и создание на сервер; обновления общие',async()=>{
   const game=new Game();for(const id of ['a','b'])game.player(id).paidBalanceMinor=1500000;const elements=new Map(),handlers=new Map(),intervals=[],requests=[];
-  const original=Object.fromEntries(['document','window','fetch','setInterval','setTimeout','sessionStorage','FormData'].map(k=>[k,globalThis[k]]));
+  const original=Object.fromEntries(['document','window','fetch','setInterval','setTimeout','sessionStorage','FormData','location','history'].map(k=>[k,globalThis[k]]));
   const el=s=>{if(!elements.has(s))elements.set(s,{value:s==='#sort'?'rating':'',dataset:{},style:{},innerHTML:'',textContent:'',open:false,classList:{add(){},remove(){}},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(s);};
   const packages=[1,2,3].map(v=>({dataset:{package:String(v)}}));
   globalThis.document={querySelector:el,querySelectorAll:s=>s==='[data-package]'?packages:[],addEventListener:(name,fn)=>handlers.set(name,fn)};
@@ -26,6 +26,10 @@ test('интерфейс отправляет поддержку, лайк, ст
     if(url==='/api/payments'){
       if(!options.body)return {ok:true,json:async()=>({enabled:true,test:false,receiptEmailRequired:true,min:100,max:50000,orders:[]})};
       checkouts.push(JSON.parse(options.body));return {ok:true,json:async()=>({order:{id:'order-fixture',status:'pending',confirmationUrl:'https://yoomoney.ru/checkout/fixture'},state:structuredClone(game.view(viewer))})};
+    }
+    if(url.startsWith('/api/payments/')&&url.endsWith('/check')){
+      game.player(viewer).testPaidBalanceMinor=500000;game.state.revision++;
+      return {ok:true,json:async()=>({order:{status:'succeeded',test:true},state:structuredClone(game.view(viewer))})};
     }
     const a=JSON.parse(options.body);requests.push(a);
     try{const result=game.action(viewer,a);return {ok:true,json:async()=>({result,state:structuredClone(game.view(viewer))})};}
@@ -54,6 +58,9 @@ test('интерфейс отправляет поддержку, лайк, ст
     assert.match(el('#fight-bars').innerHTML,/Симуляция: ♥ 7/);assert.equal(game.world.fighter(id).likes,1);
     game.action('b',{type:'support',requestId:randomUUID(),fighterId:id,points:3,expected:game.world.supportStatus(id).key});
     await intervals[0]();assert.match(el('#fight-bars').innerHTML,/5 очк/);
+    game.player(viewer).testPaidBalanceMinor=50000;await intervals[0]();
+    assert.equal(el('#test-paid-wallet').hidden,false);assert.match(el('#test-paid-balance').textContent,/500/);
+    game.player(viewer).testPaidBalanceMinor=0;await intervals[0]();assert.equal(el('#test-paid-wallet').hidden,true);
     const before=game.state.now;await intervals[0]();assert.equal(game.state.now,before,'браузер не запускает симуляцию');
     click('[data-ticket]',{ticket:id,tournament:game.state.tournament.id});el('#bet-amount').value='500';await el('#bet-form').onsubmit({preventDefault(){}});
     assert.equal(game.player('a').bets.length,1);assert.equal(requests.at(-1).type,'bet');
@@ -81,5 +88,15 @@ test('интерфейс отправляет поддержку, лайк, ст
     el('#payment-amount').value='500';el('#payment-email').value='receipt@example.com';
     await el('#payment-form').onsubmit({preventDefault(){}});assert.equal(checkouts.length,1);assert.equal(checkouts[0].amount,500);assert.equal(redirected,'https://yoomoney.ru/checkout/fixture');
     await el('#payment-form').onsubmit({preventDefault(){}});assert.equal(checkouts[0].requestId,checkouts[1].requestId);assert.equal(game.player(viewer).paidBalanceMinor,paidBefore);
+    let welcomeHidden=false,returnedUrl='';const paymentId=randomUUID();
+    el('#welcome').classList.add=name=>{if(name==='hidden')welcomeHidden=true;};el('#modal').open=true;
+    globalThis.location={href:'https://arena.example/?source=checkout&payment_return='+paymentId+'#arena'};
+    globalThis.history={replaceState(_state,_title,url){returnedUrl=url;}};
+    await import('../dist/app.js?return='+randomUUID());await new Promise(setImmediate);
+    assert.equal(welcomeHidden,true);assert.equal(el('#modal').open,false);
+    assert.equal(el('#payment-return-status').hidden,false);assert.match(el('#payment-return-status').textContent,/Тестовая оплата подтверждена/);
+    assert.match(el('#test-paid-balance').textContent,/5.?000/);assert.equal(el('#test-paid-wallet').hidden,false);
+    assert.equal(returnedUrl,'/?source=checkout#arena');assert.equal(sessionValues.has('yarost-checkout'),false);
+    assert.equal(checkouts.length,2,'return never creates a new checkout');
   }finally{Object.assign(globalThis,original);}
 });
